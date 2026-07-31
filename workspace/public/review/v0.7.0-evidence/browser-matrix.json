@@ -1,0 +1,111 @@
+{
+  "version": "0.7.0",
+  "releaseName": "Spacecraft Travel",
+  "runId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109",
+  "startedAt": "2026-07-31T04:40:41.509Z",
+  "failedAt": "2026-07-31T04:41:34.961Z",
+  "passed": false,
+  "completedStandardShards": [
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "phase": "viewport",
+      "key": "chromium__desktop__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-chromium__desktop__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/chromium__desktop__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "tablet",
+      "phase": "viewport",
+      "key": "chromium__tablet__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-chromium__tablet__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/chromium__tablet__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "mobile",
+      "phase": "viewport",
+      "key": "chromium__mobile__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-chromium__mobile__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/chromium__mobile__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "desktop",
+      "phase": "viewport",
+      "key": "firefox__desktop__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-firefox__desktop__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/firefox__desktop__viewport/browser-qa-results.json",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "tablet",
+      "phase": "viewport",
+      "key": "firefox__tablet__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-firefox__tablet__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/firefox__tablet__viewport/browser-qa-results.json",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "mobile",
+      "phase": "viewport",
+      "key": "firefox__mobile__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-firefox__mobile__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/firefox__mobile__viewport/browser-qa-results.json",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "phase": "viewport",
+      "key": "webkit__desktop__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-webkit__desktop__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/webkit__desktop__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "tablet",
+      "phase": "viewport",
+      "key": "webkit__tablet__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-webkit__tablet__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/webkit__tablet__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "mobile",
+      "phase": "viewport",
+      "key": "webkit__mobile__viewport",
+      "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-webkit__mobile__viewport",
+      "evidencePath": "public/review/v0.7.0-evidence/webkit__mobile__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    }
+  ],
+  "completedTravelShards": [],
+  "error": "Error: /usr/bin/node qa/browser-qa.js failed with exit code 1.\n    at ChildProcess.<anonymous> (file:///data/users/9a039f18-81be-4ace-b1b7-e462aa541cc1/projects/project_2206707b-dc70-4db8-be41-19c2b1020d52/workspace/qa/run-release-matrix.js:53:38)\n    at Object.onceWrapper (node:events:631:26)\n    at ChildProcess.emit (node:events:509:28)\n    at ChildProcess._handle.onexit (node:internal/child_process:295:12)"
+}

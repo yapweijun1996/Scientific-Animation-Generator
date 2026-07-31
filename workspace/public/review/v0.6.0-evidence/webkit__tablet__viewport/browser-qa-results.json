@@ -1,0 +1,45 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T11:10:19.561Z",
+  "baseUrl": "http://127.0.0.1:37085/",
+  "browsers": [
+    {
+      "name": "webkit",
+      "viewports": [
+        {
+          "viewport": "tablet",
+          "renderer": "webgl",
+          "webGlAvailable": true,
+          "rendererFallbackExpected": false,
+          "screenshot": "main-webkit-tablet.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        }
+      ],
+      "interactions": null
+    }
+  ],
+  "downloads": {},
+  "standalone": [],
+  "offline": {},
+  "canvasFallback": {},
+  "mobileImmersion": {},
+  "simulationClock": {},
+  "scientificLearning": {},
+  "observer": {},
+  "visualScale": {},
+  "passed": true,
+  "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__tablet__viewport",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/webkit__tablet__viewport",
+  "requestedBrowsers": [
+    "webkit"
+  ],
+  "requestedViewports": [
+    "tablet"
+  ],
+  "requestedPhases": [
+    "viewport"
+  ]
+}

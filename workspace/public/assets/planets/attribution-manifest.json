@@ -1,0 +1,151 @@
+{
+  "projectId": "project_2206707b-dc70-4db8-be41-19c2b1020d52",
+  "createdAt": "2026-07-27T23:44:00.016Z",
+  "entries": [
+    {
+      "path": "assets/planets/high/mercury.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/venus-surface.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/venus-atmosphere.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/earth-day.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/earth-night.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/earth-clouds.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/mars.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/jupiter.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/saturn.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/saturn-ring.png",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/uranus.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    },
+    {
+      "path": "assets/planets/high/neptune.jpg",
+      "sourceUrl": "https://www.solarsystemscope.com/textures/",
+      "author": "Solar System Scope / INOVE",
+      "license": "CC BY 4.0",
+      "attributionText": "Planet textures © Solar System Scope / INOVE, licensed under CC BY 4.0.",
+      "intendedUse": "demo",
+      "risk": "medium",
+      "warnings": [
+        "License should be reviewed before external distribution."
+      ]
+    }
+  ],
+  "highestRisk": "medium"
+}

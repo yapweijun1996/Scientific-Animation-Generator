@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Scientific Animation Generator</title>
+  <desc id="desc">A glowing planet with two orbital paths.</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%">
+      <stop offset="0" stop-color="#173c61"/>
+      <stop offset="1" stop-color="#050a12"/>
+    </radialGradient>
+    <linearGradient id="planet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#74dcff"/>
+      <stop offset="1" stop-color="#2d9cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <g fill="none" stroke-linecap="round">
+    <ellipse cx="256" cy="256" rx="176" ry="70" transform="rotate(-18 256 256)" stroke="#56c8ff" stroke-width="18" opacity=".72"/>
+    <ellipse cx="256" cy="256" rx="80" ry="184" transform="rotate(28 256 256)" stroke="#3b82f6" stroke-width="15" opacity=".5"/>
+  </g>
+  <circle cx="256" cy="256" r="66" fill="url(#planet)"/>
+  <circle cx="231" cy="228" r="13" fill="#dff8ff" opacity=".7"/>
+  <circle cx="402" cy="212" r="18" fill="#f6c566"/>
+</svg>

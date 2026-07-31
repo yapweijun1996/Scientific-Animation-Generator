@@ -1,0 +1,25 @@
+{
+  "name": "scientific-animation-generator",
+  "private": true,
+  "version": "0.7.0",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "generate:standalone": "node scripts/build-standalone-runtime.js",
+    "dev": "npm run generate:standalone && vite",
+    "build": "npm run generate:standalone && tsc --noEmit && vite build && node qa/validate-production-build.js",
+    "test": "node qa/run-release-matrix.js",
+    "test:quick": "TRAVEL_QA_BROWSER=chromium node qa/travel-browser-qa.js",
+    "typecheck": "npm run generate:standalone && tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@types/three": "0.185.1",
+    "fflate": "0.8.3",
+    "playwright": "1.61.0",
+    "three": "0.185.1",
+    "typescript": "7.0.2",
+    "vite": "7.3.6"
+  }
+}

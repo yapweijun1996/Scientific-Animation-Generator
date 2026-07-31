@@ -1,0 +1,61 @@
+{
+  "version": "0.4.4",
+  "title": "Standalone Runtime Consolidation",
+  "date": "2026-07-29",
+  "status": "release-candidate-passed-after-package-repair",
+  "previousVersion": "0.4.3",
+  "summary": "Replaced the manually duplicated standalone Solar System implementation with a generated single-file runtime compiled from shared application modules while preserving offline, zero-CDN, direct-file and ZIP behavior.",
+  "changes": [
+    "Added dedicated standalone entry, bootstrap, UI and type modules.",
+    "Injected simulation Worker and planet texture sources into the shared SolarSystemRuntime.",
+    "Generated a versioned standalone bundle from shared celestial, orbital, rendering and fallback modules.",
+    "Reduced standalone-export.ts to approximately 3.2 KB of export orchestration.",
+    "Kept standalone HTML and ZIP export on one authoritative builder.",
+    "Added repeatable Chromium, Firefox and WebKit browser QA with desktop, tablet, mobile, offline, file and fallback coverage.",
+    "Stored all planet texture binaries in the source workspace and added exact production asset validation.",
+    "Added browser failure gates for all HTTP 4xx and 5xx responses.",
+    "Advanced the Service Worker cache to science-animator-v11-standalone-runtime."
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "automatedTests": "passed",
+    "standaloneAssertions": 21,
+    "architectureAssertions": 10,
+    "zipAssertions": 7,
+    "productionPlanetAssets": 13,
+    "browsers": ["chromium", "firefox", "webkit"],
+    "viewports": ["desktop", "tablet", "mobile"],
+    "directFile": "passed",
+    "offlineReload": "passed",
+    "canvasFallback": "passed",
+    "accessibilityViolations": 0,
+    "externalRuntimeRequests": 0,
+    "httpErrorResponses": 0
+  },
+  "artifacts": {
+    "releaseNotes": "review/v0.4.4-release-notes.md",
+    "qaReport": "review/v0.4.4-qa-report.md",
+    "browserResults": "review/v0.4.4-evidence/browser-qa-results.json",
+    "compare": "release/v0.4.4-compare.md",
+    "rollback": "release/v0.4.4-rollback.md"
+  },
+  "exports": {
+    "standalone": {
+      "filename": "solar-system-animation-v0.4.4.html",
+      "bytes": 7901208,
+      "sha256": "868432a105ff5256100ddc9d0d2cbf5e716ff25997e0a2036ed7d11a1772aed8"
+    },
+    "zip": {
+      "filename": "solar-system-source-v0.4.4.zip",
+      "bytes": 5521957,
+      "sha256": "fbfe7dae555b9ff9e93b2092abf7deeefa6138a29fe2ae6355207a0af8343993"
+    }
+  },
+  "publicationRepair": {
+    "detectedBy": "post-publish multi-browser HTTPS inspection",
+    "issue": "planet texture files absent from initial dist caused HTTP 404 responses",
+    "resolution": "restored verified assets, synchronized them into public/assets/planets, added build and HTTP status gates, rebuilt and reran full QA"
+  },
+  "rollbackBackup": "backup_2206707b-dc7_ms4glqok"
+}

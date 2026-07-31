@@ -1,0 +1,277 @@
+{
+  "version": "0.6.0",
+  "runId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529",
+  "startedAt": "2026-07-30T11:09:29.804Z",
+  "completedAt": "2026-07-30T11:12:25.151Z",
+  "passed": true,
+  "shardCount": 17,
+  "viewportCount": 9,
+  "browserViewportMatrix": [
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "fallbackExpected": false,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "tablet",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "fallbackExpected": false,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "mobile",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "fallbackExpected": false,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "desktop",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "fallbackExpected": true,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "tablet",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "fallbackExpected": true,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "mobile",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "fallbackExpected": true,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "fallbackExpected": false,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "tablet",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "fallbackExpected": false,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "mobile",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "fallbackExpected": false,
+      "passed": true
+    }
+  ],
+  "interactionBrowsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "standaloneBrowsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "offline": {
+    "browser": "chromium",
+    "viewport": "mobile",
+    "passed": true
+  },
+  "canvasFallback": {
+    "browser": "chromium",
+    "viewport": "desktop",
+    "passed": true
+  },
+  "screenshotsCaptured": true,
+  "shards": [
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "phase": "viewport",
+      "key": "chromium__desktop__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__desktop__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__desktop__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "tablet",
+      "phase": "viewport",
+      "key": "chromium__tablet__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__tablet__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__tablet__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "mobile",
+      "phase": "viewport",
+      "key": "chromium__mobile__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__mobile__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__mobile__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "desktop",
+      "phase": "viewport",
+      "key": "firefox__desktop__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-firefox__desktop__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/firefox__desktop__viewport/browser-qa-results.json",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "tablet",
+      "phase": "viewport",
+      "key": "firefox__tablet__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-firefox__tablet__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/firefox__tablet__viewport/browser-qa-results.json",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "mobile",
+      "phase": "viewport",
+      "key": "firefox__mobile__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-firefox__mobile__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/firefox__mobile__viewport/browser-qa-results.json",
+      "renderer": "canvas-2d",
+      "webGlAvailable": false,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "phase": "viewport",
+      "key": "webkit__desktop__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__desktop__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/webkit__desktop__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "tablet",
+      "phase": "viewport",
+      "key": "webkit__tablet__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__tablet__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/webkit__tablet__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "mobile",
+      "phase": "viewport",
+      "key": "webkit__mobile__viewport",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__mobile__viewport",
+      "evidencePath": "public/review/v0.6.0-evidence/webkit__mobile__viewport/browser-qa-results.json",
+      "renderer": "webgl",
+      "webGlAvailable": true,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "phase": "interactions",
+      "key": "chromium__desktop__interactions",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__desktop__interactions",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__desktop__interactions/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "desktop",
+      "phase": "interactions",
+      "key": "firefox__desktop__interactions",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-firefox__desktop__interactions",
+      "evidencePath": "public/review/v0.6.0-evidence/firefox__desktop__interactions/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "phase": "interactions",
+      "key": "webkit__desktop__interactions",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__desktop__interactions",
+      "evidencePath": "public/review/v0.6.0-evidence/webkit__desktop__interactions/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "phase": "standalone",
+      "key": "chromium__desktop__standalone",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__desktop__standalone",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__desktop__standalone/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "firefox",
+      "viewport": "desktop",
+      "phase": "standalone",
+      "key": "firefox__desktop__standalone",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-firefox__desktop__standalone",
+      "evidencePath": "public/review/v0.6.0-evidence/firefox__desktop__standalone/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "phase": "standalone",
+      "key": "webkit__desktop__standalone",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__desktop__standalone",
+      "evidencePath": "public/review/v0.6.0-evidence/webkit__desktop__standalone/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "mobile",
+      "phase": "offline",
+      "key": "chromium__mobile__offline",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__mobile__offline",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__mobile__offline/browser-qa-results.json",
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "phase": "canvas",
+      "key": "chromium__desktop__canvas",
+      "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__desktop__canvas",
+      "evidencePath": "public/review/v0.6.0-evidence/chromium__desktop__canvas/browser-qa-results.json",
+      "passed": true
+    }
+  ]
+}

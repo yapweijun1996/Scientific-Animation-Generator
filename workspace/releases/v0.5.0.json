@@ -1,0 +1,48 @@
+{
+  "version": "0.5.0",
+  "title": "Mobile Immersion & Time Foundation",
+  "status": "published",
+  "entryFile": "index.html",
+  "publishedUrl": "https://content.gmb01.xyz/share/project_2206707b-dc70-4db8-be41-19c2b1020d52/index.html",
+  "releasedAt": "2026-07-30T01:08:01+08:00",
+  "changes": [
+    "Mobile and portrait-tablet full-screen immersive canvas with a draggable floating Control button.",
+    "Full-screen Tabs-and-Cards Control Center with Basic and Advanced modes.",
+    "Authoritative Simulation Clock with minute-to-year presets, custom presets, exact date/time jump and deterministic reverse time.",
+    "Quality-tiered deterministic asteroid belt and collision-aware labels.",
+    "Equivalent v0.5 time and mobile controls in standalone HTML and Canvas fallback.",
+    "Exclusive browser QA lifecycle using an OS-assigned port, run-scoped artifacts, atomic evidence promotion and awaited shutdown."
+  ],
+  "checks": {
+    "typecheck": "pass",
+    "productionBuild": "pass",
+    "standaloneAssertions": 25,
+    "architectureAssertions": 11,
+    "zipAssertions": 7,
+    "browsers": ["chromium", "firefox", "webkit"],
+    "viewports": ["desktop", "tablet", "mobile"],
+    "directFileStandalone": "pass",
+    "offlineReload": "pass",
+    "canvasFallback": "pass",
+    "pwaAudit": "19 passed, 0 warnings, 0 errors",
+    "accessibility": "0 violations",
+    "publishedInspection": "0 blocking errors, 0 asset failures"
+  },
+  "exports": {
+    "standalone": {
+      "filename": "solar-system-animation-v0.5.0.html",
+      "bytes": 7915868,
+      "sha256": "c731e9a0a62aa327525381cffa4587125e1a9f3ca39e590d2279ba9837ada021"
+    },
+    "zip": {
+      "filename": "solar-system-source-v0.5.0.zip",
+      "bytes": 5526542,
+      "sha256": "d63682f491633dc5ce08694976eb38c9a625b844268b32f94b4baef760b82eae"
+    }
+  },
+  "qaRunId": "2026-07-29T16-55-43-245Z-57716",
+  "rollbackVersion": "0.4.4",
+  "preReleaseBackup": "backup_2206707b-dc7_ms67h59w",
+  "publishedBackup": "backup_2206707b-dc7_ms6c9q4t",
+  "publishedInspection": "https://gmb01.xyz/share/50b129d1-bb17-465d-bae9-b01b8759803f/multi-browser-inspect-d6006bab-cf1f-4357-9d6c-12f09840f6b4.html"
+}

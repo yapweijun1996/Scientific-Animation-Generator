@@ -1,0 +1,73 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T11:10:00.454Z",
+  "baseUrl": "http://127.0.0.1:34743/",
+  "browsers": [
+    {
+      "name": "chromium",
+      "viewports": [
+        {
+          "viewport": "mobile",
+          "renderer": "webgl",
+          "webGlAvailable": true,
+          "rendererFallbackExpected": false,
+          "screenshot": "main-chromium-mobile.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        }
+      ],
+      "interactions": null
+    }
+  ],
+  "downloads": {},
+  "standalone": [],
+  "offline": {},
+  "canvasFallback": {},
+  "mobileImmersion": {
+    "fullCanvas": true,
+    "floatingControl": true,
+    "responsiveControlShell": true
+  },
+  "simulationClock": {
+    "minuteToYearPresets": true,
+    "exactDate": true,
+    "reverseTime": true,
+    "deterministicRecompute": true,
+    "deterministicStep": true,
+    "workerCanvasParity": false
+  },
+  "scientificLearning": {
+    "exploreLearnModes": false,
+    "moonPhases": false,
+    "eclipses": false,
+    "seasons": false,
+    "eventJump": false,
+    "objectInformation": false
+  },
+  "observer": {
+    "manualLocations": true,
+    "groundSky": false,
+    "multiLocationComparison": false,
+    "offline": false
+  },
+  "visualScale": {
+    "learning": false,
+    "realDistance": false,
+    "realScale": false,
+    "calculationPresentationSeparated": true
+  },
+  "passed": true,
+  "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__mobile__viewport",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/chromium__mobile__viewport",
+  "requestedBrowsers": [
+    "chromium"
+  ],
+  "requestedViewports": [
+    "mobile"
+  ],
+  "requestedPhases": [
+    "viewport"
+  ]
+}

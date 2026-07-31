@@ -1,0 +1,249 @@
+{
+  "version": "0.5.0",
+  "runAt": "2026-07-29T16:55:55.759Z",
+  "baseUrl": "http://127.0.0.1:34499/",
+  "browsers": [
+    {
+      "name": "chromium",
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "renderer": "webgl",
+          "screenshot": "main-chromium-desktop.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        },
+        {
+          "viewport": "tablet",
+          "renderer": "webgl",
+          "screenshot": "main-chromium-tablet.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        },
+        {
+          "viewport": "mobile",
+          "renderer": "webgl",
+          "screenshot": "main-chromium-mobile.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        }
+      ],
+      "interactions": {
+        "qualityCycle": [
+          "high",
+          "low",
+          "auto",
+          "high"
+        ],
+        "focusCycle": [
+          "moon",
+          "earth",
+          "saturn",
+          "moon"
+        ],
+        "snapshotRestored": true,
+        "pauseResume": true,
+        "reverseTime": true,
+        "exactDateJump": true
+      }
+    },
+    {
+      "name": "firefox",
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "renderer": "canvas-2d",
+          "screenshot": "main-firefox-desktop.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        },
+        {
+          "viewport": "tablet",
+          "renderer": "canvas-2d",
+          "screenshot": "main-firefox-tablet.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        },
+        {
+          "viewport": "mobile",
+          "renderer": "canvas-2d",
+          "screenshot": "main-firefox-mobile.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        }
+      ],
+      "interactions": {
+        "qualityCycle": [
+          "high",
+          "low",
+          "auto",
+          "high"
+        ],
+        "focusCycle": [
+          "moon",
+          "earth",
+          "saturn",
+          "moon"
+        ],
+        "snapshotRestored": true,
+        "pauseResume": true,
+        "reverseTime": true,
+        "exactDateJump": true
+      }
+    },
+    {
+      "name": "webkit",
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "renderer": "webgl",
+          "screenshot": "main-webkit-desktop.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        },
+        {
+          "viewport": "tablet",
+          "renderer": "webgl",
+          "screenshot": "main-webkit-tablet.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        },
+        {
+          "viewport": "mobile",
+          "renderer": "webgl",
+          "screenshot": "main-webkit-mobile.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        }
+      ],
+      "interactions": {
+        "qualityCycle": [
+          "high",
+          "low",
+          "auto",
+          "high"
+        ],
+        "focusCycle": [
+          "moon",
+          "earth",
+          "saturn",
+          "moon"
+        ],
+        "snapshotRestored": true,
+        "pauseResume": true,
+        "reverseTime": true,
+        "exactDateJump": true
+      }
+    }
+  ],
+  "downloads": {
+    "standalone": {
+      "filename": "solar-system-animation-v0.5.0.html",
+      "bytes": 7915868,
+      "sha256": "c731e9a0a62aa327525381cffa4587125e1a9f3ca39e590d2279ba9837ada021"
+    },
+    "zip": {
+      "filename": "solar-system-source-v0.5.0.zip",
+      "bytes": 5526542,
+      "sha256": "d63682f491633dc5ce08694976eb38c9a625b844268b32f94b4baef760b82eae",
+      "entries": [
+        "ATTRIBUTION.md",
+        "README.md",
+        "assets/planets/earth-clouds.jpg",
+        "assets/planets/earth-day.jpg",
+        "assets/planets/earth-night.jpg",
+        "assets/planets/jupiter.jpg",
+        "assets/planets/mars.jpg",
+        "assets/planets/mercury.jpg",
+        "assets/planets/neptune.jpg",
+        "assets/planets/saturn-ring.png",
+        "assets/planets/saturn.jpg",
+        "assets/planets/uranus.jpg",
+        "assets/planets/venus-atmosphere.jpg",
+        "assets/planets/venus-surface.jpg",
+        "index.html",
+        "project.scienceproject"
+      ]
+    }
+  },
+  "standalone": [
+    {
+      "browser": "chromium",
+      "directFile": true,
+      "noHttpRequests": true,
+      "renderer": "webgl",
+      "mobileControlCenter": true,
+      "reverseTime": true,
+      "screenshot": "standalone-file-chromium.png"
+    },
+    {
+      "browser": "firefox",
+      "directFile": true,
+      "noHttpRequests": true,
+      "renderer": "canvas-2d",
+      "mobileControlCenter": true,
+      "reverseTime": true,
+      "screenshot": "standalone-file-firefox.png"
+    },
+    {
+      "browser": "webkit",
+      "directFile": true,
+      "noHttpRequests": true,
+      "renderer": "webgl",
+      "mobileControlCenter": true,
+      "reverseTime": true,
+      "screenshot": "standalone-file-webkit.png"
+    }
+  ],
+  "offline": {
+    "cachedReload": true,
+    "moonFocusOffline": true,
+    "mobileControlCenterOffline": true,
+    "screenshot": "offline-reload-chromium.png"
+  },
+  "canvasFallback": {
+    "forcedWebGlUnavailable": true,
+    "moonFocus": true,
+    "asteroidBelt": true,
+    "reverseTime": true,
+    "qualityCycle": [
+      "low",
+      "auto",
+      "high",
+      "low"
+    ],
+    "screenshot": "canvas-fallback-chromium.png"
+  },
+  "mobileImmersion": {
+    "fullCanvas": true,
+    "floatingControl": true,
+    "fullScreenControlCenter": true
+  },
+  "simulationClock": {
+    "minuteToYearPresets": true,
+    "exactDate": true,
+    "reverseTime": true,
+    "deterministicRecompute": true
+  },
+  "passed": true,
+  "qaRunId": "2026-07-29T16-55-43-245Z-57716",
+  "evidenceDirectory": "public/review/v0.5.0-evidence"
+}

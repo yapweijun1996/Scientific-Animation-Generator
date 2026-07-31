@@ -1,0 +1,68 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T11:11:39.310Z",
+  "baseUrl": "http://127.0.0.1:36225/",
+  "browsers": [
+    {
+      "name": "chromium",
+      "viewports": [],
+      "interactions": null
+    }
+  ],
+  "downloads": {},
+  "standalone": [],
+  "offline": {
+    "cachedReload": true,
+    "moonFocusOffline": true,
+    "mobileControlCenterOffline": true,
+    "learningOffline": true,
+    "observerOffline": true,
+    "screenshot": "offline-reload-chromium.png"
+  },
+  "canvasFallback": {},
+  "mobileImmersion": {
+    "fullCanvas": true,
+    "floatingControl": true,
+    "responsiveControlShell": true
+  },
+  "simulationClock": {
+    "minuteToYearPresets": true,
+    "exactDate": true,
+    "reverseTime": true,
+    "deterministicRecompute": true,
+    "deterministicStep": true,
+    "workerCanvasParity": false
+  },
+  "scientificLearning": {
+    "exploreLearnModes": false,
+    "moonPhases": false,
+    "eclipses": false,
+    "seasons": false,
+    "eventJump": false,
+    "objectInformation": false
+  },
+  "observer": {
+    "manualLocations": true,
+    "groundSky": false,
+    "multiLocationComparison": false,
+    "offline": true
+  },
+  "visualScale": {
+    "learning": false,
+    "realDistance": false,
+    "realScale": false,
+    "calculationPresentationSeparated": true
+  },
+  "passed": true,
+  "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-chromium__mobile__offline",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/chromium__mobile__offline",
+  "requestedBrowsers": [
+    "chromium"
+  ],
+  "requestedViewports": [
+    "mobile"
+  ],
+  "requestedPhases": [
+    "offline"
+  ]
+}

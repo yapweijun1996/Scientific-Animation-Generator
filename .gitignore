@@ -1,0 +1,17 @@
+# Stable public deployment snapshot — kept locally as the v0.6.0 rollback
+# reference and compare-before-release baseline, but not tracked in git.
+published/
+
+# Dependencies
+node_modules/
+
+# Build output
+workspace/dist/
+workspace/qa-dist/
+
+# QA run artifacts (screenshots, result JSON, downloaded exports)
+workspace/qa-evidence/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

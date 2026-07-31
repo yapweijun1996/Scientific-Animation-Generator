@@ -1,0 +1,63 @@
+{
+  "version": "0.7.0",
+  "releaseName": "Spacecraft Travel",
+  "taskId": "task_010",
+  "status": "release_candidate_blocked",
+  "generatedAt": "2026-07-31T03:40:30.000Z",
+  "stablePublishedVersion": "0.6.0",
+  "stableUrl": "https://content.gmb01.xyz/share/project_2206707b-dc70-4db8-be41-19c2b1020d52/index.html",
+  "published": false,
+  "publicationBlocker": {
+    "id": "consolidated-browser-matrix",
+    "summary": "The shared QA host is launching delayed duplicate Playwright commands and producing target crashes/navigation timeouts before application assertions. One clean consolidated browser matrix is still required.",
+    "unblockRequirement": "Clear shared Playwright process/queue state and complete exactly one passing consolidated release matrix before publishing."
+  },
+  "features": [
+    "Earth-origin eight-planet Travel Mode",
+    "Hohmann transfer planning",
+    "Fly-by and Orbiter missions",
+    "Follow and Free spacecraft cameras",
+    "simplified Delta-v fuel realism",
+    "mission state machine and key-event auto-pause",
+    "WebGL and Canvas mission parity",
+    "Travel snapshot and standalone export support"
+  ],
+  "scientificModel": {
+    "classification": "Educational Accuracy",
+    "trajectoryModel": "Idealised heliocentric two-body Hohmann transfer",
+    "directTransfer": "Unavailable without Lambert solver",
+    "gravityAssist": "Unavailable without patched-conic or N-body solver",
+    "operationalUse": false
+  },
+  "checks": {
+    "lint": "passed",
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "scientificRegression": "13/13 passed",
+    "travelDomainRegression": "passed",
+    "exportSmoke": "passed",
+    "pwaAudit": "19/19 passed",
+    "chromiumTravelWebGl": "passed",
+    "webkitTravelWebGl": "passed",
+    "firefoxTravelCanvas": "passed",
+    "standaloneTravelDirectFile": "passed",
+    "consolidatedBrowserMatrix": "blocked"
+  },
+  "targetedEvidence": [
+    "qa-evidence/travel-browser/2026-07-31T00-12-50-712Z-chromium-auto-92768/travel-browser-results.json",
+    "qa-evidence/travel-browser/2026-07-31T00-05-39-105Z-webkit-auto-92290/travel-browser-results.json",
+    "qa-evidence/travel-browser/2026-07-30T23-36-03-457Z-firefox-canvas-89343/travel-browser-results.json",
+    "qa-evidence/travel-standalone/2026-07-31T00-58-01-307Z-firefox-canvas-99468/travel-standalone-results.json"
+  ],
+  "reports": {
+    "qa": "review/v0.7.0-qa-report.md",
+    "releaseNotes": "review/v0.7.0-release-notes.md",
+    "scientificModel": "review/v0.7.0-spacecraft-travel-scientific-report.md",
+    "comparison": "release/v0.7.0-compare.md",
+    "rollback": "release/v0.7.0-rollback.md"
+  },
+  "rollback": {
+    "stableVersion": "0.6.0",
+    "backupId": "backup_2206707b-dc7_ms7fomwl"
+  }
+}

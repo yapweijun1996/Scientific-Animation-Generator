@@ -1,0 +1,47 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T11:11:34.987Z",
+  "baseUrl": "http://127.0.0.1:43641/",
+  "browsers": [
+    {
+      "name": "firefox",
+      "viewports": [],
+      "interactions": null
+    }
+  ],
+  "downloads": {},
+  "standalone": [
+    {
+      "browser": "firefox",
+      "directFile": true,
+      "noHttpRequests": true,
+      "renderer": "canvas-2d",
+      "mobileControlCenter": true,
+      "reverseTime": true,
+      "learnMode": true,
+      "observer": true,
+      "eventJump": true,
+      "visualScale": true,
+      "screenshot": "standalone-file-firefox.png"
+    }
+  ],
+  "offline": {},
+  "canvasFallback": {},
+  "mobileImmersion": {},
+  "simulationClock": {},
+  "scientificLearning": {},
+  "observer": {},
+  "visualScale": {},
+  "passed": true,
+  "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-firefox__desktop__standalone",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/firefox__desktop__standalone",
+  "requestedBrowsers": [
+    "firefox"
+  ],
+  "requestedViewports": [
+    "desktop"
+  ],
+  "requestedPhases": [
+    "standalone"
+  ]
+}

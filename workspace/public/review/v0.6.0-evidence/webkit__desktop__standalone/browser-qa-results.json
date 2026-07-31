@@ -1,0 +1,47 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T11:11:36.811Z",
+  "baseUrl": "http://127.0.0.1:36459/",
+  "browsers": [
+    {
+      "name": "webkit",
+      "viewports": [],
+      "interactions": null
+    }
+  ],
+  "downloads": {},
+  "standalone": [
+    {
+      "browser": "webkit",
+      "directFile": true,
+      "noHttpRequests": true,
+      "renderer": "webgl",
+      "mobileControlCenter": true,
+      "reverseTime": true,
+      "learnMode": true,
+      "observer": true,
+      "eventJump": true,
+      "visualScale": true,
+      "screenshot": "standalone-file-webkit.png"
+    }
+  ],
+  "offline": {},
+  "canvasFallback": {},
+  "mobileImmersion": {},
+  "simulationClock": {},
+  "scientificLearning": {},
+  "observer": {},
+  "visualScale": {},
+  "passed": true,
+  "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__desktop__standalone",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/webkit__desktop__standalone",
+  "requestedBrowsers": [
+    "webkit"
+  ],
+  "requestedViewports": [
+    "desktop"
+  ],
+  "requestedPhases": [
+    "standalone"
+  ]
+}

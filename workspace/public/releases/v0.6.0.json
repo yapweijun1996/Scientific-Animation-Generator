@@ -1,0 +1,112 @@
+{
+  "version": "0.6.0",
+  "name": "Scientific Learning & Observation",
+  "status": "published",
+  "stableUrl": "https://content.gmb01.xyz/share/project_2206707b-dc70-4db8-be41-19c2b1020d52/index.html",
+  "projectId": "project_2206707b-dc70-4db8-be41-19c2b1020d52",
+  "taskId": "task_009",
+  "generatedAt": "2026-07-30T11:18:00.000Z",
+  "publishedAt": "2026-07-30T11:22:13.580Z",
+  "publishedVerification": {
+    "verifiedAt": "2026-07-30T11:31:28.773Z",
+    "publishedFilesValidated": 144,
+    "visibleVersion": "0.6.0",
+    "multibrowserViewportPassed": 9,
+    "multibrowserViewportTotal": 9,
+    "horizontalOverflowFindings": 0,
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "failedRequests": 0,
+    "assetFailures": 0,
+    "httpErrors": 0,
+    "desktopLighthouse": {
+      "performance": 95,
+      "accessibility": 100,
+      "bestPractices": 96,
+      "seo": 92,
+      "reportUrl": "https://content.gmb01.xyz/artifact/090bf61e-d250-49f1-b92f-cc15fe4229e3/lighthouse-d9499ffa-0f67-4bc9-961b-b3151ff4a7e4.html"
+    },
+    "mobileLighthouse": {
+      "status": "tool-adapter-returned-null-scores",
+      "coverageAlternative": "Published mobile Chromium, Firefox and WebKit inspections passed without console, page, request, asset or layout errors; the local release matrix also passed all three mobile browser shards and offline mobile."
+    },
+    "accessibility": {
+      "desktopLighthouseScore": 100,
+      "staticReview": "pass",
+      "captureAnalysisFindings": 0,
+      "axeAdapterStatus": "tool screenshot step timed out before returning axe results"
+    },
+    "reports": {
+      "chromiumResponsive": "https://gmb01.xyz/share/05843c7c-0220-4df6-a522-1c77ee9bafc7/web-inspect-65884587-4e16-4d82-ace6-618bcf23003a.html",
+      "multibrowser": "https://gmb01.xyz/share/e5ac63e5-f8ce-43b5-bfa2-21447d7ddfc5/multi-browser-inspect-0b7b31d9-6a81-4a6b-87de-2d6f3d802509.html",
+      "capture": "https://gmb01.xyz/share/05bc7652-5b5b-4815-8020-64a8fae6a018/webpage-capture-e61e15f3-d81f-4f2b-9c40-065ef6f8e49a.html",
+      "captureAnalysis": "https://gmb01.xyz/share/8d5ae6c0-52d1-4f85-a2dc-234f3820dcfb/webpage-analysis-d4b1ee56-a011-4af1-94d1-8557d14c7881.html"
+    },
+    "hostingDisclosure": "The application source and standalone export contain no telemetry integration. The public share host injects a Cloudflare Insights beacon outside the project source."
+  },
+  "qa": {
+    "runId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529",
+    "passed": true,
+    "shardsPassed": 17,
+    "shardsTotal": 17,
+    "browserViewportPassed": 9,
+    "browserViewportTotal": 9,
+    "scientificChecksPassed": 13,
+    "scientificChecksTotal": 13,
+    "scientificTestEvents": 31,
+    "pwaPass": 19,
+    "pwaWarnings": 0,
+    "pwaErrors": 0,
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "failedRequests": 0,
+    "httpErrors": 0
+  },
+  "build": {
+    "generatedRuntimeBytes": 689143,
+    "productionFiles": 122,
+    "publishedFiles": 144,
+    "verifiedPlanetAssets": 13,
+    "standaloneAssertions": 31,
+    "architectureAssertions": 20,
+    "zipAssertions": 7
+  },
+  "exports": {
+    "standalone": {
+      "filename": "solar-system-animation-v0.6.0.html",
+      "bytes": 7960995,
+      "sha256": "e80c4a1cf05051939a0e31e4804bd2033d379c9a9b1e4b84ecbdc22e437f7390"
+    },
+    "zip": {
+      "filename": "solar-system-source-v0.6.0.zip",
+      "bytes": 5540960,
+      "sha256": "8a85da829ce31bee87ad2c6a560307d7d4a6659f742c22bce009dc1082851ed8"
+    }
+  },
+  "astronomyProvider": {
+    "id": "project-kepler-educational-v1",
+    "name": "Project Baseline Kepler Provider",
+    "version": "1.0.0",
+    "precision": "educational",
+    "verifiedStart": "1900-01-01",
+    "verifiedEnd": "2100-12-31",
+    "datasetVerifiedClaims": 0
+  },
+  "recovery": {
+    "publishedV06BackupId": "backup_2206707b-dc7_ms7fomwl",
+    "publishedV06BackupVerified": true,
+    "rollbackVersion": "0.5.0",
+    "rollbackBackupId": "backup_2206707b-dc7_ms6ih89w",
+    "rollbackBackupVerified": true
+  },
+  "documents": [
+    "review/v0.6.0-release-notes.md",
+    "review/v0.6.0-qa-report.md",
+    "review/v0.6.0-scientific-accuracy-report.md",
+    "release/v0.6.0-compare.md",
+    "release/v0.6.0-rollback.md",
+    "memory/v0.6.0-scientific-learning-observation.md",
+    "PRIVACY.md",
+    "ATTRIBUTION.md"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T11:10:21.910Z",
+  "baseUrl": "http://127.0.0.1:35821/",
+  "browsers": [
+    {
+      "name": "webkit",
+      "viewports": [
+        {
+          "viewport": "mobile",
+          "renderer": "webgl",
+          "webGlAvailable": true,
+          "rendererFallbackExpected": false,
+          "screenshot": "main-webkit-mobile.png",
+          "consoleErrors": [],
+          "pageErrors": [],
+          "failedRequests": [],
+          "httpErrors": []
+        }
+      ],
+      "interactions": null
+    }
+  ],
+  "downloads": {},
+  "standalone": [],
+  "offline": {},
+  "canvasFallback": {},
+  "mobileImmersion": {},
+  "simulationClock": {},
+  "scientificLearning": {},
+  "observer": {},
+  "visualScale": {},
+  "passed": true,
+  "qaRunId": "v0.6.0-release-2026-07-30T11-09-29-804Z-54529-webkit__mobile__viewport",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/webkit__mobile__viewport",
+  "requestedBrowsers": [
+    "webkit"
+  ],
+  "requestedViewports": [
+    "mobile"
+  ],
+  "requestedPhases": [
+    "viewport"
+  ]
+}

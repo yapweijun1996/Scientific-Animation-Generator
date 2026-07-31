@@ -1,0 +1,131 @@
+{
+  "version": "0.6.0",
+  "runAt": "2026-07-30T10:42:38.520Z",
+  "baseUrl": "http://127.0.0.1:35689/",
+  "browsers": [
+    {
+      "name": "chromium",
+      "viewports": [],
+      "interactions": {
+        "qualityCycle": [
+          "high",
+          "low",
+          "auto",
+          "high"
+        ],
+        "focusCycle": [
+          "moon",
+          "earth",
+          "saturn",
+          "moon"
+        ],
+        "snapshotRestored": true,
+        "pauseResume": true,
+        "reverseTime": true,
+        "exactDateJump": true,
+        "learnMode": true,
+        "eventJump": true,
+        "observerLocation": true,
+        "visualScaleModes": [
+          "learning",
+          "real-distance",
+          "real-scale"
+        ],
+        "sourcesAndAccuracy": true
+      }
+    }
+  ],
+  "downloads": {
+    "standalone": {
+      "filename": "solar-system-animation-v0.6.0.html",
+      "bytes": 7960988,
+      "sha256": "5c9ac7d4b28e98656fad49d7a742c14eea1d0d1cf5eaac5e634968882e693ef0"
+    },
+    "zip": {
+      "filename": "solar-system-source-v0.6.0.zip",
+      "bytes": 5540962,
+      "sha256": "414b0703c1d90988248a03b6a7364f2c554d40049dad22d69c95e90534dec3f5",
+      "entries": [
+        "ATTRIBUTION.md",
+        "README.md",
+        "assets/planets/earth-clouds.jpg",
+        "assets/planets/earth-day.jpg",
+        "assets/planets/earth-night.jpg",
+        "assets/planets/jupiter.jpg",
+        "assets/planets/mars.jpg",
+        "assets/planets/mercury.jpg",
+        "assets/planets/neptune.jpg",
+        "assets/planets/saturn-ring.png",
+        "assets/planets/saturn.jpg",
+        "assets/planets/uranus.jpg",
+        "assets/planets/venus-atmosphere.jpg",
+        "assets/planets/venus-surface.jpg",
+        "index.html",
+        "project.scienceproject"
+      ]
+    }
+  },
+  "standalone": [],
+  "offline": {},
+  "canvasFallback": {
+    "forcedWebGlUnavailable": true,
+    "moonFocus": true,
+    "asteroidBelt": true,
+    "reverseTime": true,
+    "visualScaleModes": true,
+    "realDistanceOverview": true,
+    "qualityCycle": [
+      "low",
+      "auto",
+      "high",
+      "low"
+    ],
+    "screenshot": "canvas-fallback-chromium.png"
+  },
+  "mobileImmersion": {
+    "fullCanvas": true,
+    "floatingControl": true,
+    "responsiveControlShell": true
+  },
+  "simulationClock": {
+    "minuteToYearPresets": true,
+    "exactDate": true,
+    "reverseTime": true,
+    "deterministicRecompute": true,
+    "deterministicStep": true,
+    "workerCanvasParity": true
+  },
+  "scientificLearning": {
+    "exploreLearnModes": true,
+    "moonPhases": true,
+    "eclipses": true,
+    "seasons": true,
+    "eventJump": true,
+    "objectInformation": true
+  },
+  "observer": {
+    "manualLocations": true,
+    "groundSky": true,
+    "multiLocationComparison": true,
+    "offline": false
+  },
+  "visualScale": {
+    "learning": true,
+    "realDistance": true,
+    "realScale": true,
+    "calculationPresentationSeparated": true
+  },
+  "passed": true,
+  "qaRunId": "2026-07-30T10-42-33-845Z-49688",
+  "evidenceDirectory": "public/review/v0.6.0-evidence/chromium__desktop__interactions-canvas",
+  "requestedBrowsers": [
+    "chromium"
+  ],
+  "requestedViewports": [
+    "desktop"
+  ],
+  "requestedPhases": [
+    "interactions",
+    "canvas"
+  ]
+}
