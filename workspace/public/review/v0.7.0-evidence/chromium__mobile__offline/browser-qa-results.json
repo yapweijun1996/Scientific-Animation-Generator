@@ -1,29 +1,24 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T01:49:52.831Z",
-  "baseUrl": "http://127.0.0.1:51429/",
+  "runAt": "2026-08-01T01:48:42.673Z",
+  "baseUrl": "http://127.0.0.1:51394/",
   "browsers": [
     {
       "name": "chromium",
-      "viewports": [
-        {
-          "viewport": "mobile",
-          "renderer": "webgl",
-          "webGlAvailable": true,
-          "rendererFallbackExpected": false,
-          "screenshot": "main-chromium-mobile.png",
-          "consoleErrors": [],
-          "pageErrors": [],
-          "failedRequests": [],
-          "httpErrors": []
-        }
-      ],
+      "viewports": [],
       "interactions": null
     }
   ],
   "downloads": {},
   "standalone": [],
-  "offline": {},
+  "offline": {
+    "cachedReload": true,
+    "moonFocusOffline": true,
+    "mobileControlCenterOffline": true,
+    "learningOffline": true,
+    "observerOffline": true,
+    "screenshot": "offline-reload-chromium.png"
+  },
   "canvasFallback": {},
   "mobileImmersion": {
     "fullCanvas": true,
@@ -50,7 +45,7 @@
     "manualLocations": true,
     "groundSky": false,
     "multiLocationComparison": false,
-    "offline": false
+    "offline": true
   },
   "visualScale": {
     "learning": false,
@@ -59,8 +54,8 @@
     "calculationPresentationSeparated": true
   },
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T01-49-38-631Z-65331-chromium__mobile__viewport",
-  "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__mobile__viewport",
+  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-chromium__mobile__offline",
+  "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__mobile__offline",
   "requestedBrowsers": [
     "chromium"
   ],
@@ -68,6 +63,6 @@
     "mobile"
   ],
   "requestedPhases": [
-    "viewport"
+    "offline"
   ]
 }

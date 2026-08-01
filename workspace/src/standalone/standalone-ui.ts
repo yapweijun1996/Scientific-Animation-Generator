@@ -6,7 +6,7 @@ import { PLANETS } from '../templates/solar-system/planet-data';
 export interface StandaloneUi {
   readonly scene: HTMLDivElement;
   readonly controlButton: HTMLButtonElement;
-  readonly panel: HTMLElement;
+  readonly panel: HTMLDialogElement;
   readonly closeButton: HTMLButtonElement;
   readonly playButton: HTMLButtonElement;
   readonly resetButton: HTMLButtonElement;
@@ -52,16 +52,16 @@ const STANDALONE_CSS = `
 button,input,select{font:inherit;color:inherit}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .standalone-shell{position:relative;width:100%;height:100%;overflow:hidden;background:#020610}.standalone-scene{position:absolute;inset:0}.runtime-stage{position:relative;width:100%;height:100%;overflow:hidden}
 .solar-canvas{display:block;width:100%;height:100%;touch-action:none}.planet-label-layer{position:absolute;inset:0;pointer-events:none;z-index:2}.planet-label{position:absolute;padding:4px 7px;border:1px solid #ffffff20;border-radius:999px;background:#07111fd4;color:#eef6ff;font-size:9px;line-height:1;white-space:nowrap;transform:translate(-50%,-50%);backdrop-filter:blur(8px)}.planet-label.is-focused{border-color:#63d4ff88;background:#071d30ee}
-.standalone-control-button{position:absolute;z-index:8;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:grid;width:56px;height:56px;place-items:center;border:1px solid #63d4ff66;border-radius:18px;background:linear-gradient(145deg,#123a59f5,#071829f5);box-shadow:0 16px 42px #0009,0 0 28px #2d9cff20;cursor:pointer;font-size:20px;backdrop-filter:blur(12px)}
+.standalone-control-button{position:absolute;z-index:8;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:flex;min-width:118px;height:48px;padding:0 16px;align-items:center;justify-content:center;border:1px solid #63d4ff66;border-radius:16px;background:linear-gradient(145deg,#123a59f5,#071829f5);box-shadow:0 16px 42px #0009,0 0 28px #2d9cff20;cursor:pointer;font-size:13px;font-weight:800}
 .standalone-chip{position:absolute;z-index:6;top:max(12px,env(safe-area-inset-top));left:50%;max-width:calc(100% - 100px);padding:7px 10px;border:1px solid #ffffff18;border-radius:999px;background:#07111fc7;color:#b7cae0;font-size:9px;transform:translateX(-50%);backdrop-filter:blur(10px);pointer-events:none}
-.standalone-panel[hidden]{display:none}.standalone-panel{position:absolute;z-index:10;inset:0;display:grid;opacity:0;pointer-events:none;transition:opacity .22s ease}.standalone-panel.is-open{opacity:1;pointer-events:auto}.standalone-backdrop{position:absolute;inset:0;background:#000815c9;backdrop-filter:blur(12px)}
+.standalone-panel{position:fixed;z-index:10;inset:0;display:grid;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;padding:12px;border:0;background:transparent;color:#eef6ff}.standalone-panel:not([open]){display:none}.standalone-panel::backdrop{background:#000815c9}
 .standalone-surface{position:relative;display:grid;grid-template-rows:auto minmax(0,1fr) auto;width:min(760px,calc(100% - 24px));height:min(780px,calc(100% - 24px));margin:auto;overflow:hidden;border:1px solid #80bce83b;border-radius:24px;background:radial-gradient(circle at 85% -10%,#2c8fe329,transparent 32%),linear-gradient(180deg,#081423fc,#040c17fc);box-shadow:0 40px 120px #000c}
 .standalone-header{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:center;gap:10px;padding:15px 17px;border-bottom:1px solid var(--line)}.standalone-header small{display:block;color:var(--muted);font-size:8px;letter-spacing:.1em;text-transform:uppercase}.standalone-header strong{display:block;margin-top:3px;font-size:15px}.standalone-close{display:grid;width:44px;height:44px;padding:0;place-items:center;border:1px solid var(--line);border-radius:10px;background:#ffffff0a;cursor:pointer;font-size:22px}
 .standalone-body{min-height:0;overflow:auto;padding:13px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;align-items:start;scrollbar-width:thin}.standalone-card{min-width:0;padding:13px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(145deg,#ffffff09,#ffffff03)}.standalone-card.is-wide{grid-column:1/-1}.standalone-card small{display:block;color:var(--muted);font-size:8px}.standalone-card strong{display:block;margin-top:4px;font-size:12px}.standalone-date{font-size:16px!important}.standalone-utc{margin-top:5px!important}.standalone-actions{display:flex;gap:7px;margin-top:11px}.standalone-actions button,.standalone-card select,.standalone-card input:not([type=range]),.standalone-apply{min-height:44px;border:1px solid var(--line);border-radius:10px;background:#ffffff0a;padding:0 10px}.standalone-actions button{flex:1;cursor:pointer}.standalone-primary{border-color:#63d4ff77!important;background:linear-gradient(135deg,#2ca7ff,#43c5dd)!important;color:#00111d!important;font-weight:800}.standalone-label{display:grid;gap:6px;margin-top:10px;color:var(--muted);font-size:8px}.standalone-label select,.standalone-label input{width:100%}
 .standalone-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}.standalone-presets button{min-height:40px;padding:0 6px;border:1px solid var(--line);border-radius:9px;background:#ffffff08;color:#dcecff;cursor:pointer;font-size:8px}.standalone-rate{display:flex;align-items:center;justify-content:space-between;gap:8px}.standalone-rate output{color:var(--accent);font-size:9px}.standalone-card input[type=range]{width:100%;min-height:44px;accent-color:var(--accent)}.standalone-apply{width:100%;margin-top:8px;cursor:pointer}.standalone-direction{width:100%;margin-top:9px;cursor:pointer}.standalone-direction.is-reverse{border-color:#f6c56666;color:#f6c566}
 .standalone-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:58px;padding:9px 13px calc(9px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#030a12b8}.standalone-status{overflow:hidden;color:var(--muted);font-size:8px;text-overflow:ellipsis;white-space:nowrap}.standalone-footer button{min-height:40px;padding:0 14px;border:1px solid #63d4ff77;border-radius:10px;background:linear-gradient(135deg,#2ca7ff,#43c5dd);color:#00111d;font-weight:800;cursor:pointer}
 .standalone-science-summary{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#020a14;color:#cfe2f5;font-size:9px;line-height:1.55}.standalone-science-summary strong{font-size:11px}.standalone-science-summary small{margin-top:4px}.standalone-event-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end}.standalone-event-row button{min-height:44px;padding:0 11px}.standalone-reading-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px}.standalone-reading-grid div{padding:9px;border:1px solid var(--line);border-radius:9px;background:#020a14}.standalone-reading-grid span{display:block;color:var(--muted);font-size:7px}.standalone-reading-grid strong{display:block;margin-top:4px;font-size:9px}.standalone-travel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.standalone-travel-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}.standalone-travel-actions button{min-height:44px;border:1px solid var(--line);border-radius:10px;background:#ffffff0a;cursor:pointer}.standalone-travel-actions .standalone-primary{border-color:#72e8be77!important;background:linear-gradient(135deg,#36b894,#72e8be)!important}.standalone-mission-progress{height:8px;margin:9px 0;overflow:hidden;border:1px solid var(--line);border-radius:999px;background:#020811}.standalone-mission-progress i{display:block;height:100%;background:linear-gradient(90deg,#2d9cff,#63d4ff,#72e8be)}.standalone-error{display:grid;place-items:center;width:100%;height:100%;padding:24px;color:#d8e7f8;text-align:center}
-@media(max-width:720px){.standalone-surface{width:100%;height:100%;border:0;border-radius:0}.standalone-backdrop{display:none}.standalone-header{padding-top:calc(12px + env(safe-area-inset-top));padding-right:calc(12px + env(safe-area-inset-right));padding-left:calc(12px + env(safe-area-inset-left))}.standalone-body{grid-template-columns:1fr;padding-right:calc(12px + env(safe-area-inset-right));padding-left:calc(12px + env(safe-area-inset-left))}.standalone-card.is-wide{grid-column:auto}.standalone-footer{padding-right:calc(12px + env(safe-area-inset-right));padding-left:calc(12px + env(safe-area-inset-left))}.standalone-presets{grid-template-columns:repeat(2,minmax(0,1fr))}.standalone-date{font-size:14px!important}}
+@media(max-width:720px){.standalone-panel{align-items:end;padding:0}.standalone-surface{align-self:end;width:100%;height:min(85dvh,760px);margin:0;border-width:1px 0 0;border-radius:22px 22px 0 0}.standalone-header{padding-top:calc(12px + env(safe-area-inset-top));padding-right:calc(12px + env(safe-area-inset-right));padding-left:calc(12px + env(safe-area-inset-left))}.standalone-body{grid-template-columns:1fr;padding-right:calc(12px + env(safe-area-inset-right));padding-left:calc(12px + env(safe-area-inset-left))}.standalone-card.is-wide{grid-column:auto}.standalone-footer{padding-right:calc(12px + env(safe-area-inset-right));padding-left:calc(12px + env(safe-area-inset-left))}.standalone-presets{grid-template-columns:repeat(2,minmax(0,1fr))}.standalone-date{font-size:14px!important}}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
 `;
 
@@ -101,25 +101,21 @@ export function mountStandaloneUi(root: HTMLElement): StandaloneUi {
   chip.className = 'standalone-chip';
   chip.textContent = `Solar System Explorer · v${APP_VERSION}`;
 
-  const controlButton = button('⌘', 'standalone-control-button');
+  const controlButton = button('☰ Controls', 'standalone-control-button');
   controlButton.className = 'standalone-control-button';
   controlButton.setAttribute('aria-label', 'Open Solar System controls');
 
-  const panel = document.createElement('section');
+  const panel = document.createElement('dialog');
   panel.className = 'standalone-panel';
-  panel.hidden = true;
-  panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-modal', 'true');
-  panel.setAttribute('aria-label', 'Solar System Control Center');
-
-  const backdrop = document.createElement('div');
-  backdrop.className = 'standalone-backdrop';
+  panel.setAttribute('aria-labelledby', 'standalone-control-title');
   const surface = document.createElement('div');
   surface.className = 'standalone-surface';
   const header = document.createElement('header');
   header.className = 'standalone-header';
   const title = document.createElement('div');
   title.innerHTML = `<small>Single-file offline runtime</small><strong>Control Center · ${APP_RELEASE_NAME}</strong>`;
+  const titleText = title.querySelector('strong');
+  if (titleText) titleText.id = 'standalone-control-title';
   const closeButton = button('×', 'standalone-close');
   closeButton.className = 'standalone-close';
   closeButton.setAttribute('aria-label', 'Close controls');
@@ -316,28 +312,29 @@ export function mountStandaloneUi(root: HTMLElement): StandaloneUi {
   status.id = 'standalone-status';
   status.setAttribute('role', 'status');
   status.textContent = 'Starting offline runtime…';
-  const doneButton = button('Apply & Close');
+  const doneButton = button('Close');
   footer.append(status, doneButton);
 
   surface.append(header, body, footer);
-  panel.append(backdrop, surface);
+  panel.append(surface);
   shell.append(scene, chip, controlButton, panel);
   root.replaceChildren(shell);
 
   const open = (): void => {
-    panel.hidden = false;
-    requestAnimationFrame(() => panel.classList.add('is-open'));
-    closeButton.focus();
+    if (!panel.open) panel.showModal();
+    panel.classList.add('is-open');
+    requestAnimationFrame(() => closeButton.focus());
   };
   const close = (): void => {
     panel.classList.remove('is-open');
-    window.setTimeout(() => {
-      if (!panel.classList.contains('is-open')) panel.hidden = true;
-    }, 230);
+    if (panel.open) panel.close();
   };
   controlButton.addEventListener('click', open);
   closeButton.addEventListener('click', close);
-  backdrop.addEventListener('click', close);
+  panel.addEventListener('click', (event) => {
+    if (event.target === panel) close();
+  });
+  panel.addEventListener('close', () => panel.classList.remove('is-open'));
   doneButton.addEventListener('click', close);
 
   return {

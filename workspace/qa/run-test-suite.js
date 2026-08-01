@@ -173,6 +173,7 @@ parentWatch = setInterval(() => {
 
 acquireLock();
 try {
+  await run(process.execPath, ['qa/render-performance-policy.js']);
   if (!skipPrebuild) {
     await run('npm', ['run', 'build']);
     await run(process.execPath, ['qa/cleanup-generated.js']);

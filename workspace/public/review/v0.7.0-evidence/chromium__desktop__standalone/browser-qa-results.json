@@ -1,28 +1,30 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T01:49:45.815Z",
-  "baseUrl": "http://127.0.0.1:51417/",
+  "runAt": "2026-08-01T01:48:32.195Z",
+  "baseUrl": "http://127.0.0.1:51386/",
   "browsers": [
     {
       "name": "chromium",
-      "viewports": [
-        {
-          "viewport": "desktop",
-          "renderer": "webgl",
-          "webGlAvailable": true,
-          "rendererFallbackExpected": false,
-          "screenshot": "main-chromium-desktop.png",
-          "consoleErrors": [],
-          "pageErrors": [],
-          "failedRequests": [],
-          "httpErrors": []
-        }
-      ],
+      "viewports": [],
       "interactions": null
     }
   ],
   "downloads": {},
-  "standalone": [],
+  "standalone": [
+    {
+      "browser": "chromium",
+      "directFile": true,
+      "noHttpRequests": true,
+      "renderer": "webgl",
+      "mobileControlCenter": true,
+      "reverseTime": true,
+      "learnMode": true,
+      "observer": true,
+      "eventJump": true,
+      "visualScale": true,
+      "screenshot": "standalone-file-chromium.png"
+    }
+  ],
   "offline": {},
   "canvasFallback": {},
   "mobileImmersion": {
@@ -59,8 +61,8 @@
     "calculationPresentationSeparated": true
   },
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T01-49-38-631Z-65331-chromium__desktop__viewport",
-  "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__desktop__viewport",
+  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-chromium__desktop__standalone",
+  "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__desktop__standalone",
   "requestedBrowsers": [
     "chromium"
   ],
@@ -68,6 +70,6 @@
     "desktop"
   ],
   "requestedPhases": [
-    "viewport"
+    "standalone"
   ]
 }

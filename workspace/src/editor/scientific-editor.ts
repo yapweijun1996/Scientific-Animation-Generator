@@ -61,6 +61,8 @@ type FloatingCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 const CUSTOM_PRESETS_KEY = 'solar-explorer-v05-time-presets';
 const COMPLEXITY_KEY = 'solar-explorer-v05-complexity';
 const FLOATING_CORNER_KEY = 'solar-explorer-v05-floating-corner';
+const LEFT_PANEL_COLLAPSED_KEY = 'solar-explorer-v07-left-panel-collapsed';
+const RIGHT_PANEL_COLLAPSED_KEY = 'solar-explorer-v07-right-panel-collapsed';
 
 function cloneParameters(parameters: ParameterMap): ParameterMap {
   return { ...parameters };
@@ -125,6 +127,18 @@ export class ScientificEditor {
   private resizeObserver?: ResizeObserver;
   private autosaveTimer?: number;
   private statusTimer?: number;
+  private simulationUiTimer?: number;
+  private lastSimulationUiUpdateMs = 0;
+  private readonly simulationDateFormatter = new Intl.DateTimeFormat('en-SG', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  });
   private renderedFrames = 0;
   private frameRateTimer?: number;
   private frameRateSampledAt = 0;
@@ -143,6 +157,9 @@ export class ScientificEditor {
     ? (localStorage.getItem(FLOATING_CORNER_KEY) as FloatingCorner)
     : 'bottom-right';
   private floatingWasDragged = false;
+  private leftPanelCollapsed = localStorage.getItem(LEFT_PANEL_COLLAPSED_KEY) !== 'false';
+  private rightPanelCollapsed = localStorage.getItem(RIGHT_PANEL_COLLAPSED_KEY) !== 'false';
+  private controlCenterTrigger?: HTMLElement;
   private focusedObject = 'sun';
   private scientificLearning?: ScientificLearningController;
   private spacecraftTravel?: SpacecraftTravelController;
@@ -155,6 +172,7 @@ export class ScientificEditor {
     this.render();
     this.applyComplexityMode();
     this.applyFloatingCorner();
+    this.applySidePanelState();
     this.bindShellEvents();
     this.renderParameterControls();
     this.renderTimePresets();
@@ -252,10 +270,13 @@ export class ScientificEditor {
           <div class="topbar-center" aria-label="Project status">
             <span class="status-pill"><i></i> Offline-first</span>
             <span class="status-pill">Unified Simulation Clock</span>
+            <button id="toggle-templates-panel" class="panel-toggle-button" type="button" aria-controls="templates-panel"><span aria-hidden="true">▤</span> Scenes</button>
+            <button id="toggle-inspector-panel" class="panel-toggle-button" type="button" aria-controls="inspector-panel"><span aria-hidden="true">◫</span> Inspector</button>
           </div>
           <div class="topbar-actions">
-            <button id="undo-button" class="icon-button" type="button" aria-label="Undo" title="Undo">↶</button>
-            <button id="redo-button" class="icon-button" type="button" aria-label="Redo" title="Redo">↷</button>
+            <button id="open-control-center-button" class="secondary-button" type="button"><span aria-hidden="true">☰</span> Control Center</button>
+            <button id="copy-embed-button" class="secondary-button" type="button"><span aria-hidden="true">⧉</span> Copy iframe</button>
+            <button id="fullscreen-button" class="secondary-button" type="button"><span aria-hidden="true">⛶</span> Full screen</button>
             <button id="install-button" class="secondary-button" type="button" hidden>Install PWA</button>
             <button id="export-html-button" class="primary-button" type="button">Export HTML</button>
           </div>
@@ -265,11 +286,12 @@ export class ScientificEditor {
           <h1 class="sr-only">Solar System Explorer</h1>
           <aside id="templates-panel" class="side-panel templates-panel desktop-shell" aria-label="Template library">
             <div class="panel-heading">
-              <div><span class="eyebrow">Template library</span><h2>Scientific scenes</h2></div>
+              <div><span class="eyebrow">Template library</span><h2>Scenes</h2></div>
+              <span class="scene-count">1 scene</span>
             </div>
             <div class="template-list">
               <button class="template-card is-active" type="button">
-                <span class="template-preview solar-preview" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="template-preview solar-preview" aria-hidden="true"><i class="orbit-ring"></i><i class="planet-sphere"></i></span>
                 <span><strong>Solar System Explorer</strong><small>Explore · Learn · Travel foundation</small></span>
                 <em>Active</em>
               </button>
@@ -280,8 +302,28 @@ export class ScientificEditor {
               </button>
             </div>
             <div class="panel-note">
-              <strong>Current programme</strong>
+              <span class="eyebrow">Current programme</span>
               <p>v0.6 adds guided astronomy learning, event jumps, observer locations, sky coordinates and visible scientific provenance.</p>
+              <a class="panel-link" href="/review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener">View release notes <span aria-hidden="true">→</span></a>
+            </div>
+
+            <nav class="quick-access" aria-label="Quick access">
+              <span class="eyebrow">Quick access</span>
+              <button type="button" data-quick-access="accuracy-report"><i class="quick-icon is-teal" aria-hidden="true">✓</i> Scientific Accuracy Report</button>
+              <a href="/review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener"><i class="quick-icon is-blue" aria-hidden="true">≡</i> Release notes</a>
+              <a href="/ATTRIBUTION.md" target="_blank" rel="noopener"><i class="quick-icon is-amber" aria-hidden="true">◎</i> Texture attribution</a>
+              <a href="/PRIVACY.md" target="_blank" rel="noopener"><i class="quick-icon is-violet" aria-hidden="true">◐</i> Privacy</a>
+            </nav>
+
+            <div class="panel-footer">
+              <span id="panel-status" class="panel-status">Starting scientific runtime…</span>
+              <div class="panel-icon-row">
+                <button id="undo-button" class="icon-button" type="button" aria-label="Undo" title="Undo">↶</button>
+                <button id="redo-button" class="icon-button" type="button" aria-label="Redo" title="Redo">↷</button>
+                <button id="panel-complexity-button" class="icon-button" type="button" aria-label="Toggle Basic and Advanced complexity" title="Toggle Basic and Advanced complexity">◑</button>
+                <button id="panel-settings-button" class="icon-button" type="button" aria-label="Open Control Center" title="Open Control Center">⚙</button>
+                <button id="panel-reset-button" class="icon-button" type="button" aria-label="Reset simulation" title="Reset simulation">↻</button>
+              </div>
             </div>
           </aside>
 
@@ -295,23 +337,52 @@ export class ScientificEditor {
                 <select id="focus-select">${focusOptions}</select>
               </label>
               <div class="workspace-toolbar-spacer"></div>
-              <button id="open-control-center-button" class="toolbar-button" type="button">Control Center</button>
-              <button id="copy-embed-button" class="toolbar-button" type="button">Copy iframe</button>
-              <button id="fullscreen-button" class="toolbar-button" type="button">Full screen</button>
+              <div class="toolbar-readout">
+                <div class="toolbar-clock">
+                  <span class="eyebrow">Simulation time (UTC)</span>
+                  <strong id="toolbar-simulation-date">01 Jan 2026, 00:00</strong>
+                </div>
+                <span id="toolbar-rate-label" class="toolbar-chip is-rate">1 day/s</span>
+                <span id="fps-meter" class="toolbar-chip fps-meter" hidden aria-live="off">— fps</span>
+                <span id="performance-label" class="toolbar-chip is-muted">Adaptive quality</span>
+              </div>
             </div>
 
             <div class="viewport-frame">
               <div class="viewport-header desktop-shell">
-                <div><span class="live-dot"></span> Live scientific preview</div>
+                <div><span class="live-dot"></span> Live preview</div>
                 <div class="viewport-header-right">
-                  <span id="fps-meter" class="fps-meter" hidden aria-live="off">— fps</span>
-                  <span id="performance-label">Adaptive quality</span>
+                  <span class="viewport-header-caption">Live scientific preview</span>
                 </div>
               </div>
               <div id="runtime-viewport" class="runtime-viewport"></div>
-              <aside class="desktop-object-info desktop-shell" data-object-science-root aria-live="polite"></aside>
               <div id="mobile-state-chip" class="mobile-state-chip" aria-live="polite" hidden></div>
-              <div class="viewport-hint desktop-shell"><span>Drag to orbit</span><span>Pinch or scroll to zoom</span><span>Tap an object to focus</span></div>
+              <div class="view-controls desktop-shell">
+                <span class="eyebrow">View controls</span>
+                <div class="view-controls-row">
+                  <button type="button" data-view-control="focus" aria-label="Focus selected object" title="Focus selected object">⌖</button>
+                  <button type="button" data-view-control="reframe" aria-label="Frame whole system" title="Frame whole system">✥</button>
+                  <button type="button" data-view-control="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+                  <button type="button" data-view-control="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+                  <button type="button" data-view-control="reset" aria-label="Reset camera" title="Reset camera">↺</button>
+                </div>
+              </div>
+              <div class="viewport-hint desktop-shell">
+                <span><i aria-hidden="true">✥</i> Drag to orbit</span>
+                <span><i aria-hidden="true">⇕</i> Scroll to zoom</span>
+                <span><i aria-hidden="true">⌖</i> Tap to focus</span>
+              </div>
+            </div>
+
+            <div class="timescale-panel desktop-shell">
+              <div class="timescale-lead">
+                <span class="timescale-icon" aria-hidden="true">🗓</span>
+                <div><span class="eyebrow">Time scale</span><strong id="timescale-label">1 day/s</strong></div>
+              </div>
+              <div class="timescale-slider">
+                <input id="timescale-input" type="range" min="0" max="${DEFAULT_TIME_PRESETS.length - 1}" step="1" value="${DEFAULT_TIME_PRESETS.findIndex((preset) => preset.id === 'day-1')}" aria-label="Simulation time scale" />
+                <div class="timescale-ticks">${DEFAULT_TIME_PRESETS.map((preset) => `<span>${escapeHtml(preset.label)}</span>`).join('')}</div>
+              </div>
             </div>
 
             <div class="timeline-panel desktop-shell advanced-only">
@@ -329,27 +400,35 @@ export class ScientificEditor {
               <div><span class="eyebrow">Inspector</span><h2>Scene parameters</h2></div>
             </div>
             <div id="parameter-controls" class="parameter-controls"></div>
+            <section class="inspector-section selected-object-card" data-object-science-root aria-live="polite"></section>
+            <div id="parameter-controls-extra" class="parameter-controls"></div>
             <section class="inspector-section accuracy-card" data-sources-accuracy-root></section>
           </aside>
         </main>
 
         <footer class="statusbar desktop-shell">
           <span id="status-message">Starting scientific runtime…</span>
-          <span id="autosave-status">Autosave on</span>
-          <span>Template Protocol ${TEMPLATE_PROTOCOL_VERSION} · App ${APP_VERSION}</span>
+          <span class="statusbar-meta">
+            <span id="autosave-status">Autosave on</span>
+            <span>Template Protocol ${TEMPLATE_PROTOCOL_VERSION}</span>
+            <span>App ${APP_VERSION}</span>
+          </span>
+          <span class="statusbar-links">
+            <a href="/review/v${APP_VERSION}-qa-report.md" target="_blank" rel="noopener"><span aria-hidden="true">◍</span> Help</a>
+            <a href="https://github.com/yapweijun1996/Scientific-Animation-Generator/issues" target="_blank" rel="noopener"><span aria-hidden="true">✎</span> Give feedback</a>
+          </span>
         </footer>
 
         <button id="floating-control-button" class="floating-control-button" type="button" aria-label="Open Solar System controls" data-corner="${this.floatingCorner}">
-          <span aria-hidden="true">⌘</span><small>Controls</small>
+          <span aria-hidden="true">☰</span><small>Controls</small>
         </button>
 
-        <section id="control-center" class="control-center" aria-label="Solar System Control Center" aria-modal="true" role="dialog" hidden>
-          <div class="control-center-backdrop" data-close-control-center></div>
+        <dialog id="control-center" class="control-center" aria-labelledby="control-center-title">
           <div class="control-center-surface">
             <header class="control-center-header">
               <div>
                 <span class="eyebrow">Solar System Explorer</span>
-                <h2>Control Center</h2>
+                <h2 id="control-center-title">Control Center</h2>
               </div>
               <div id="experience-switch-root"></div>
               <div class="complexity-switch" aria-label="Complexity mode">
@@ -363,11 +442,11 @@ export class ScientificEditor {
               <button class="is-active" type="button" data-control-tab="time">Time</button>
               <button type="button" data-control-tab="view">View</button>
               <button type="button" data-control-tab="objects">Objects</button>
-              <button type="button" data-control-tab="learn">Learn</button>
-              <button type="button" data-control-tab="travel">Travel</button>
               <button type="button" data-control-tab="observe">Observe</button>
               <button type="button" data-control-tab="quality">Quality</button>
-              <button type="button" data-control-tab="data">Data & Export</button>
+              <button type="button" data-control-tab="data">Export</button>
+              <button type="button" data-control-tab="learn" data-context-experience="learn">Guide</button>
+              <button type="button" data-control-tab="travel" data-context-experience="travel">Mission</button>
             </nav>
 
             <div class="control-center-body">
@@ -504,11 +583,11 @@ export class ScientificEditor {
 
             <footer class="control-center-footer">
               <span id="cc-autosave-status">Autosave on</span>
-              <button id="cc-save-button" type="button">Save</button>
-              <button id="cc-apply-close-button" class="control-primary" type="button">Apply & Close</button>
+              <button id="cc-save-button" type="button">Save now</button>
+              <button id="cc-apply-close-button" class="control-primary" type="button">Close</button>
             </footer>
           </div>
-        </section>
+        </dialog>
       </div>
     `;
   }
@@ -541,11 +620,27 @@ export class ScientificEditor {
       </label>`;
   }
 
+  private applyViewControl(action: string): void {
+    const focusSelect = this.requireElement<HTMLSelectElement>('#focus-select');
+    if (action === 'focus') this.runtime.focusObject(focusSelect.value);
+    else if (action === 'reframe') this.runtime.frameOverview();
+    else if (action === 'zoom-in') this.runtime.zoomCamera(0.8);
+    else if (action === 'zoom-out') this.runtime.zoomCamera(1.25);
+    else if (action === 'reset') {
+      this.runtime.frameOverview();
+      this.setStatus('Camera reset to system overview');
+    }
+  }
+
   private renderParameterControls(): void {
     const viewKeys = ['scaleMode', 'planetScale', 'distanceScale', 'showOrbits', 'showLabels', 'showStars'];
     const qualityKeys = ['quality'];
-    const desktopKeys = [...viewKeys, ...qualityKeys];
-    this.requireElement<HTMLElement>('#parameter-controls').innerHTML = desktopKeys
+    const primaryKeys = ['showStars', 'quality'];
+    const extraKeys = ['scaleMode', 'planetScale', 'distanceScale', 'showOrbits', 'showLabels'];
+    this.requireElement<HTMLElement>('#parameter-controls').innerHTML = primaryKeys
+      .map((key) => this.parameterMarkup(key, solarSystemManifest.parameters[key]))
+      .join('');
+    this.requireElement<HTMLElement>('#parameter-controls-extra').innerHTML = extraKeys
       .map((key) => this.parameterMarkup(key, solarSystemManifest.parameters[key]))
       .join('');
     this.requireElement<HTMLElement>('#cc-view-parameters').innerHTML = viewKeys
@@ -689,6 +784,40 @@ export class ScientificEditor {
       this.syncTimeControls();
       this.queueAutosave();
     });
+
+    this.requireElement<HTMLInputElement>('#timescale-input').addEventListener('input', (event) => {
+      const index = Number((event.currentTarget as HTMLInputElement).value);
+      const preset = DEFAULT_TIME_PRESETS[index] ?? DEFAULT_TIME_PRESETS[0];
+      this.playbackMagnitude = Math.max(1 / 1440, preset.daysPerSecond);
+      this.applyPlaybackRate();
+      this.syncTimeControls();
+      this.queueAutosave();
+    });
+
+    this.requireElement<HTMLButtonElement>('#toggle-templates-panel').addEventListener('click', () => {
+      this.leftPanelCollapsed = !this.leftPanelCollapsed;
+      localStorage.setItem(LEFT_PANEL_COLLAPSED_KEY, String(this.leftPanelCollapsed));
+      this.applySidePanelState();
+    });
+    this.requireElement<HTMLButtonElement>('#toggle-inspector-panel').addEventListener('click', () => {
+      this.rightPanelCollapsed = !this.rightPanelCollapsed;
+      localStorage.setItem(RIGHT_PANEL_COLLAPSED_KEY, String(this.rightPanelCollapsed));
+      this.applySidePanelState();
+    });
+    this.requireElement<HTMLButtonElement>('#panel-settings-button').addEventListener('click', () => this.openControlCenter());
+    this.requireElement<HTMLButtonElement>('#panel-reset-button').addEventListener('click', () => this.resetSimulation());
+    this.requireElement<HTMLButtonElement>('#panel-complexity-button').addEventListener('click', () => {
+      const next = this.complexity === 'advanced' ? 'basic' : 'advanced';
+      this.root.querySelector<HTMLButtonElement>(`[data-complexity-mode="${next}"]`)?.click();
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-quick-access="accuracy-report"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.root.querySelector<HTMLButtonElement>('[data-download-scientific-report]')?.click();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-view-control]').forEach((button) => {
+      button.addEventListener('click', () => this.applyViewControl(button.dataset.viewControl ?? ''));
+    });
     this.requireElement<HTMLButtonElement>('#apply-date-button').addEventListener('click', () => {
       const value = this.requireElement<HTMLInputElement>('#date-time-input').value;
       const days = localInputToSimulationDays(value);
@@ -745,6 +874,16 @@ export class ScientificEditor {
     this.requireElement<HTMLButtonElement>('#open-control-center-button').addEventListener('click', () => this.openControlCenter());
     this.root.querySelectorAll<HTMLElement>('[data-close-control-center]').forEach((element) => {
       element.addEventListener('click', () => this.closeControlCenter());
+    });
+    const controlCenter = this.requireElement<HTMLDialogElement>('#control-center');
+    controlCenter.addEventListener('click', (event) => {
+      if (event.target === controlCenter) this.closeControlCenter();
+    });
+    controlCenter.addEventListener('close', () => {
+      controlCenter.classList.remove('is-open');
+      document.documentElement.classList.remove('control-center-open');
+      this.controlCenterTrigger?.focus();
+      this.controlCenterTrigger = undefined;
     });
     this.bindFloatingButton();
 
@@ -827,24 +966,30 @@ export class ScientificEditor {
     this.root.querySelectorAll<HTMLElement>('[data-control-panel]').forEach((panel) => {
       panel.classList.toggle('is-active', panel.dataset.controlPanel === tab);
     });
+    const activeTab = this.root.querySelector<HTMLElement>(`[data-control-tab="${tab}"]`);
+    activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    this.scientificLearning?.renderActivePanel(tab);
   }
 
   private openControlCenter(): void {
-    const panel = this.requireElement<HTMLElement>('#control-center');
-    panel.hidden = false;
-    requestAnimationFrame(() => panel.classList.add('is-open'));
+    const panel = this.requireElement<HTMLDialogElement>('#control-center');
+    if (!panel.open) {
+      this.controlCenterTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+      panel.showModal();
+    }
+    panel.classList.add('is-open');
     document.documentElement.classList.add('control-center-open');
     this.syncTimeControls();
-    this.requireElement<HTMLButtonElement>('.control-center-close').focus();
+    requestAnimationFrame(() => {
+      const activeTab = panel.querySelector<HTMLButtonElement>('[data-control-tab].is-active:not([hidden])');
+      (activeTab ?? this.requireElement<HTMLButtonElement>('.control-center-close')).focus();
+    });
   }
 
   private closeControlCenter(): void {
-    const panel = this.requireElement<HTMLElement>('#control-center');
+    const panel = this.requireElement<HTMLDialogElement>('#control-center');
     panel.classList.remove('is-open');
-    document.documentElement.classList.remove('control-center-open');
-    window.setTimeout(() => {
-      if (!panel.classList.contains('is-open')) panel.hidden = true;
-    }, 240);
+    if (panel.open) panel.close();
   }
 
   private applyComplexityMode(): void {
@@ -860,6 +1005,16 @@ export class ScientificEditor {
 
   private applyFloatingCorner(): void {
     this.requireElement<HTMLButtonElement>('#floating-control-button').dataset.corner = this.floatingCorner;
+  }
+
+  private applySidePanelState(): void {
+    const shell = this.requireElement<HTMLElement>('.app-shell');
+    shell.dataset.leftPanelCollapsed = String(this.leftPanelCollapsed);
+    shell.dataset.rightPanelCollapsed = String(this.rightPanelCollapsed);
+    const leftToggle = this.requireElement<HTMLButtonElement>('#toggle-templates-panel');
+    const rightToggle = this.requireElement<HTMLButtonElement>('#toggle-inspector-panel');
+    leftToggle.setAttribute('aria-expanded', String(!this.leftPanelCollapsed));
+    rightToggle.setAttribute('aria-expanded', String(!this.rightPanelCollapsed));
   }
 
   private setParameter(key: string, value: number | boolean | string, recordHistory = true): void {
@@ -962,7 +1117,19 @@ export class ScientificEditor {
 
   private syncTimeControls(): void {
     const signed = this.direction * this.playbackMagnitude;
-    this.requireElement<HTMLOutputElement>('#cc-rate-output').value = formatPlaybackRate(signed);
+    const rateLabel = formatPlaybackRate(signed);
+    this.requireElement<HTMLOutputElement>('#cc-rate-output').value = rateLabel;
+    this.requireElement<HTMLElement>('#timescale-label').textContent = rateLabel;
+    this.requireElement<HTMLElement>('#toolbar-rate-label').textContent = rateLabel;
+    const nearestStop = DEFAULT_TIME_PRESETS.reduce(
+      (best, preset, index) =>
+        Math.abs(Math.log(preset.daysPerSecond) - Math.log(this.playbackMagnitude)) < best.distance
+          ? { index, distance: Math.abs(Math.log(preset.daysPerSecond) - Math.log(this.playbackMagnitude)) }
+          : best,
+      { index: 0, distance: Number.POSITIVE_INFINITY },
+    );
+    this.requireElement<HTMLInputElement>('#timescale-input').value = String(nearestStop.index);
+    this.requireElement<HTMLInputElement>('#timescale-input').setAttribute('aria-valuetext', rateLabel);
     this.requireElement<HTMLInputElement>('#speed-slider').value = String(Math.log10(Math.max(10 ** -3.2, this.playbackMagnitude)));
     this.requireElement<HTMLElement>('#direction-badge').textContent = this.direction === -1 ? 'Reverse' : 'Forward';
     this.root.querySelectorAll<HTMLButtonElement>('[data-time-direction]').forEach((button) => {
@@ -974,23 +1141,36 @@ export class ScientificEditor {
 
   private updateSimulationTime(days: number): void {
     this.simulationDays = days;
-    const date = simulationDaysToDate(days);
-    const display = new Intl.DateTimeFormat('en-SG', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-      timeZone: 'UTC',
-    }).format(date);
-    this.requireElement<HTMLOutputElement>('#simulation-days').value = `Day ${days.toFixed(3)}`;
-    this.requireElement<HTMLElement>('#simulation-date').textContent = display;
-    this.requireElement<HTMLElement>('#cc-simulation-date').textContent = display;
-    this.requireElement<HTMLElement>('#cc-simulation-utc').textContent = `UTC · ${date.toISOString()}`;
     this.scientificLearning?.updateTime(days);
     this.spacecraftTravel?.updateTime(days);
+    this.scheduleSimulationPresentation();
+  }
+
+  private scheduleSimulationPresentation(): void {
+    const now = typeof performance === 'undefined' ? Date.now() : performance.now();
+    const elapsed = now - this.lastSimulationUiUpdateMs;
+    if (elapsed >= 250) {
+      window.clearTimeout(this.simulationUiTimer);
+      this.simulationUiTimer = undefined;
+      this.renderSimulationPresentation();
+    } else if (this.simulationUiTimer === undefined) {
+      this.simulationUiTimer = window.setTimeout(() => {
+        this.simulationUiTimer = undefined;
+        this.renderSimulationPresentation();
+      }, Math.max(0, 250 - elapsed));
+    }
+  }
+
+  private renderSimulationPresentation(): void {
+    this.lastSimulationUiUpdateMs = typeof performance === 'undefined' ? Date.now() : performance.now();
+    const days = this.simulationDays;
+    const date = simulationDaysToDate(days);
+    const display = this.simulationDateFormatter.format(date);
+    this.requireElement<HTMLOutputElement>('#simulation-days').value = `Day ${days.toFixed(3)}`;
+    this.requireElement<HTMLElement>('#simulation-date').textContent = display;
+    this.requireElement<HTMLElement>('#toolbar-simulation-date').textContent = display;
+    this.requireElement<HTMLElement>('#cc-simulation-date').textContent = display;
+    this.requireElement<HTMLElement>('#cc-simulation-utc').textContent = `UTC · ${date.toISOString()}`;
     if (!this.scrubbing) {
       this.requireElement<HTMLInputElement>('#timeline-input').value = String(Math.max(-36525, Math.min(36525, days)));
       this.requireElement<HTMLInputElement>('#cc-timeline-input').value = String(Math.max(-36525, Math.min(36525, days)));
@@ -1043,10 +1223,26 @@ export class ScientificEditor {
       this.setStatus(`ZIP export blocked · ${validation.issues[0]?.message ?? 'Invalid project'}`);
       return;
     }
-    this.setStatus('Packing textures, simulation state and source…');
-    const { downloadSourceZip } = await import('../export/zip-export');
-    await downloadSourceZip(this.createSnapshot());
-    this.setStatus('Source ZIP exported · Includes HTML and project file');
+    const button = this.requireElement<HTMLButtonElement>('#export-zip-button');
+    button.disabled = true;
+    try {
+      this.setStatus('Preparing standalone data…');
+      const { downloadSourceZip } = await import('../export/zip-export');
+      await downloadSourceZip(this.createSnapshot(), (phase) => {
+        this.setStatus(
+          phase === 'preparing'
+            ? 'Preparing standalone data…'
+            : phase === 'compressing'
+              ? 'Compressing source ZIP in background…'
+              : 'Source ZIP ready',
+        );
+      });
+      this.setStatus('Source ZIP exported · Includes HTML and project file');
+    } catch (error) {
+      this.setStatus(error instanceof Error ? `ZIP export failed · ${error.message}` : 'ZIP export failed · Retry');
+    } finally {
+      button.disabled = false;
+    }
   }
 
   private async importProject(importInput: HTMLInputElement): Promise<void> {
@@ -1217,6 +1413,8 @@ export class ScientificEditor {
   private setStatus(message: string): void {
     const element = this.root.querySelector<HTMLElement>('#status-message');
     if (element) element.textContent = message;
+    const panelStatus = this.root.querySelector<HTMLElement>('#panel-status');
+    if (panelStatus) panelStatus.textContent = message;
   }
 
   private requireElement<T extends Element>(selector: string): T {
@@ -1229,6 +1427,7 @@ export class ScientificEditor {
     window.clearInterval(this.frameRateTimer);
     window.clearTimeout(this.autosaveTimer);
     window.clearTimeout(this.statusTimer);
+    window.clearTimeout(this.simulationUiTimer);
     this.resizeObserver?.disconnect();
     this.scientificLearning?.destroy();
     this.spacecraftTravel?.destroy();

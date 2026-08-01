@@ -565,20 +565,20 @@ export class RealPlanetTextureManager {
       } else {
         const source = await this.load(PLANET_FILES[id]);
         if (!this.isCurrent(token)) return;
-        const enhanced = this.derivedTexture(`${id}-enhanced`, () => enhancePlanetTexture(source, id, this.anisotropy));
         const snapshot = this.originals.get(id);
         if (snapshot) restoreMaterial(material, snapshot);
-        material.map = enhanced;
+        // The shipped maps are build-time assets. Runtime quality changes only bind and
+        // cache those maps; they never run per-pixel enhancement or normal-map synthesis.
+        material.map = source;
         material.emissiveMap = null;
         material.metalness = 0;
-        this.applyPlanetMaterialTuning(id, material, enhanced);
-        if (id === 'saturn') await this.applySaturnRing(token);
+        this.applyPlanetMaterialTuning(id, material, source);
       }
       if (!this.isCurrent(token)) return;
       material.userData.realTextureApplied = true;
       material.needsUpdate = true;
       const label = id.charAt(0).toUpperCase() + id.slice(1);
-      this.onStatus?.(`${label} polished real map ready`);
+      this.onStatus?.(`${label} precomputed real map ready`);
     } catch (error) {
       if (!this.isCurrent(token)) return;
       console.warn(`Real texture for ${id} failed; procedural fallback retained.`, error);
@@ -591,51 +591,33 @@ export class RealPlanetTextureManager {
   private applyPlanetMaterialTuning(
     id: string,
     material: THREE.MeshStandardMaterial,
-    enhanced: THREE.Texture,
+    source: THREE.Texture,
   ): void {
     if (id === 'mercury') {
-      const normal = this.derivedTexture('mercury-normal', () => deriveNormalMap(enhanced, 2.35, this.anisotropy, 768));
-      material.bumpMap = enhanced;
+      material.bumpMap = source;
       material.bumpScale = 0.105;
-      material.normalMap = normal;
-      material.normalScale.set(0.68, 0.68);
       material.roughness = 0.98;
       material.emissive.setHex(0x080604);
       material.emissiveIntensity = 0.025;
     } else if (id === 'mars') {
-      const normal = this.derivedTexture('mars-normal', () => deriveNormalMap(enhanced, 1.85, this.anisotropy, 768));
-      material.bumpMap = enhanced;
+      material.bumpMap = source;
       material.bumpScale = 0.078;
-      material.normalMap = normal;
-      material.normalScale.set(0.54, 0.54);
       material.roughness = 0.96;
       material.emissive.setHex(0x160604);
       material.emissiveIntensity = 0.035;
     } else if (id === 'jupiter') {
-      const normal = this.derivedTexture('jupiter-normal', () => deriveNormalMap(enhanced, 0.92, this.anisotropy, 640));
-      material.normalMap = normal;
-      material.normalScale.set(0.2, 0.2);
       material.roughness = 0.94;
       material.emissive.setHex(0x160d08);
       material.emissiveIntensity = 0.045;
     } else if (id === 'saturn') {
-      const normal = this.derivedTexture('saturn-normal', () => deriveNormalMap(enhanced, 0.68, this.anisotropy, 640));
-      material.normalMap = normal;
-      material.normalScale.set(0.14, 0.14);
       material.roughness = 0.96;
       material.emissive.setHex(0x130e08);
       material.emissiveIntensity = 0.038;
     } else if (id === 'uranus') {
-      const normal = this.derivedTexture('uranus-normal', () => deriveNormalMap(enhanced, 0.34, this.anisotropy, 512));
-      material.normalMap = normal;
-      material.normalScale.set(0.07, 0.07);
       material.roughness = 0.91;
       material.emissive.setHex(0x071519);
       material.emissiveIntensity = 0.055;
     } else if (id === 'neptune') {
-      const normal = this.derivedTexture('neptune-normal', () => deriveNormalMap(enhanced, 0.62, this.anisotropy, 640));
-      material.normalMap = normal;
-      material.normalScale.set(0.12, 0.12);
       material.roughness = 0.89;
       material.emissive.setHex(0x030a25);
       material.emissiveIntensity = 0.075;
@@ -648,22 +630,16 @@ export class RealPlanetTextureManager {
       this.load('venus-surface.jpg'),
     ]);
     if (!this.isCurrent(token)) return;
-    const enhanced = this.derivedTexture('venus-enhanced', () => enhancePlanetTexture(atmosphere, 'venus', this.anisotropy));
     const surfaceBump = this.derivedTexture('venus-surface-bump', () => {
       const texture = surface.clone();
       configureDataTexture(texture, this.anisotropy);
       return texture;
     });
-    const cloudNormal = this.derivedTexture('venus-cloud-normal', () =>
-      deriveNormalMap(enhanced, 0.78, this.anisotropy, 640),
-    );
     const snapshot = this.originals.get('venus');
     if (snapshot) restoreMaterial(material, snapshot);
-    material.map = enhanced;
+    material.map = atmosphere;
     material.bumpMap = surfaceBump;
     material.bumpScale = 0.018;
-    material.normalMap = cloudNormal;
-    material.normalScale.set(0.22, 0.22);
     material.roughness = 0.985;
     material.metalness = 0;
     material.emissive.setHex(0x2b1608);
@@ -677,8 +653,6 @@ export class RealPlanetTextureManager {
       this.load('earth-clouds.jpg'),
     ]);
     if (!this.isCurrent(token)) return;
-    const roughness = this.derivedTexture('earth-roughness', () => deriveEarthRoughness(day, this.anisotropy));
-    const normal = this.derivedTexture('earth-normal', () => deriveNormalMap(day, 1.45, this.anisotropy, 1024));
     const snapshot = this.originals.get('earth');
     if (snapshot) restoreMaterial(material, snapshot);
 
@@ -686,10 +660,7 @@ export class RealPlanetTextureManager {
     material.emissiveMap = night;
     material.emissive.setHex(0xffd38a);
     material.emissiveIntensity = 0.56;
-    material.roughnessMap = roughness;
     material.roughness = 0.92;
-    material.normalMap = normal;
-    material.normalScale.set(0.48, 0.48);
     material.metalness = 0.02;
 
     const cloudSnapshot = this.originals.get('earth-clouds');

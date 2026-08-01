@@ -88,6 +88,10 @@ export class ScientificLearningController {
   private readonly handleClickBound = (event: Event) => this.handleClick(event);
   private readonly handleChangeBound = (event: Event) => this.handleChange(event);
   private readonly handleSubmitBound = (event: Event) => this.handleSubmit(event);
+  private readonly accuracyRegression = runScientificAccuracyRegression();
+  private lastAccuracyOutside?: boolean;
+  private lastPresentationUpdateMs = 0;
+  private presentationUpdateTimer?: number;
 
   constructor(private readonly options: ScientificLearningControllerOptions) {}
 
@@ -103,6 +107,8 @@ export class ScientificLearningController {
   }
 
   destroy(): void {
+    window.clearTimeout(this.presentationUpdateTimer);
+    this.presentationUpdateTimer = undefined;
     this.options.root.removeEventListener('click', this.handleClickBound);
     this.options.root.removeEventListener('change', this.handleChangeBound);
     this.options.root.removeEventListener('submit', this.handleSubmitBound);
@@ -110,9 +116,15 @@ export class ScientificLearningController {
 
   updateTime(simulationDays: number): void {
     this.simulationDays = simulationDays;
-    this.renderMoonPhaseSummary();
-    this.renderObserverSky();
-    this.renderAccuracy();
+    const outside = !reportDateRangeContains(simulationDays);
+    if (outside !== this.lastAccuracyOutside) this.renderAccuracy();
+    this.scheduleVisibleTimePresentation();
+  }
+
+  renderActivePanel(tab: string): void {
+    if (tab === 'learn') this.renderMoonPhaseSummary();
+    else if (tab === 'observe') this.renderObserverSky();
+    else if (tab === 'data') this.renderAccuracy();
   }
 
   updateFocus(objectId: string): void {
@@ -140,6 +152,10 @@ export class ScientificLearningController {
     this.renderExperienceSwitch();
     if (mode === 'learn') this.options.activateControlTab('learn');
     if (mode === 'travel') this.options.activateControlTab('travel');
+    if (mode === 'explore') {
+      const active = this.options.root.querySelector<HTMLElement>('[data-control-tab].is-active')?.dataset.controlTab;
+      if (active === 'learn' || active === 'travel') this.options.activateControlTab('time');
+    }
   }
 
   getObserverSnapshot(): ObserverSnapshot {
@@ -379,8 +395,8 @@ export class ScientificLearningController {
     const roots = this.options.root.querySelectorAll<HTMLElement>('[data-sources-accuracy-root]');
     if (!roots.length) return;
     const metadata = astronomyEngine.metadata;
-    const regression = runScientificAccuracyRegression();
     const outside = !reportDateRangeContains(this.simulationDays);
+    this.lastAccuracyOutside = outside;
     const html = `
       <article class="sources-accuracy-panel">
         <div class="card-heading"><div><span class="eyebrow">Sources & Accuracy</span><h3>${escapeHtml(metadata.name)}</h3></div><span class="accuracy-chip ${outside ? 'is-warning' : ''}">${outside ? 'Outside Verified Range' : metadata.precision === 'high' ? 'High Precision' : 'Educational Accuracy'}</span></div>
@@ -391,13 +407,36 @@ export class ScientificLearningController {
           <div><span>Coordinate system</span><b>${escapeHtml(metadata.coordinateSystem)}</b></div>
           <div><span>Epoch</span><b>${escapeHtml(metadata.epoch)}</b></div>
           <div><span>Licence</span><b>${escapeHtml(metadata.licence)}</b></div>
-          <div><span>Regression</span><b>${regression.passCount}/${regression.checks.length} passed</b></div>
+          <div><span>Regression</span><b>${this.accuracyRegression.passCount}/${this.accuracyRegression.checks.length} passed</b></div>
           <div><span>Visual scale</span><b>${escapeHtml(String(this.options.root.querySelector<HTMLSelectElement>('[data-parameter="scaleMode"]')?.selectedOptions[0]?.textContent ?? 'Learning Scale'))}</b></div>
         </div>
         <details class="science-details"><summary>Known limitations</summary><ul>${metadata.knownLimitations.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></details>
         <button type="button" class="wide-button secondary" data-download-scientific-report>Download Scientific Accuracy Report</button>
       </article>`;
     roots.forEach((root) => { root.innerHTML = html; });
+  }
+
+  private scheduleVisibleTimePresentation(): void {
+    const activePanel = this.options.root.querySelector<HTMLElement>('.control-tab-panel.is-active')?.dataset.controlPanel;
+    if (activePanel !== 'learn' && activePanel !== 'observe') return;
+    const now = typeof performance === 'undefined' ? Date.now() : performance.now();
+    const elapsed = now - this.lastPresentationUpdateMs;
+    const render = (): void => {
+      this.lastPresentationUpdateMs = typeof performance === 'undefined' ? Date.now() : performance.now();
+      const current = this.options.root.querySelector<HTMLElement>('.control-tab-panel.is-active')?.dataset.controlPanel;
+      if (current === 'learn') this.renderMoonPhaseSummary();
+      else if (current === 'observe') this.renderObserverSky();
+    };
+    if (elapsed >= 250) {
+      window.clearTimeout(this.presentationUpdateTimer);
+      this.presentationUpdateTimer = undefined;
+      render();
+    } else if (this.presentationUpdateTimer === undefined) {
+      this.presentationUpdateTimer = window.setTimeout(() => {
+        this.presentationUpdateTimer = undefined;
+        render();
+      }, Math.max(0, 250 - elapsed));
+    }
   }
 
   private handleClick(event: Event): void {
@@ -410,6 +449,10 @@ export class ScientificLearningController {
       this.renderExperienceSwitch();
       if (experience === 'learn') this.options.activateControlTab('learn');
       if (experience === 'travel') this.options.activateControlTab('travel');
+      if (experience === 'explore') {
+        const active = this.options.root.querySelector<HTMLElement>('[data-control-tab].is-active')?.dataset.controlTab;
+        if (active === 'learn' || active === 'travel') this.options.activateControlTab('time');
+      }
       this.options.setStatus(`${experience === 'learn' ? 'Learn' : experience === 'travel' ? 'Travel' : 'Explore'} Mode active`);
       this.options.queueSave();
       return;

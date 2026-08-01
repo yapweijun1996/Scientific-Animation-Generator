@@ -1,16 +1,16 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-07-31T04:40:59.309Z",
-  "baseUrl": "http://127.0.0.1:37077/",
+  "runAt": "2026-08-01T01:50:05.309Z",
+  "baseUrl": "http://127.0.0.1:51451/",
   "browsers": [
     {
       "name": "firefox",
       "viewports": [
         {
           "viewport": "mobile",
-          "renderer": "canvas-2d",
-          "webGlAvailable": false,
-          "rendererFallbackExpected": true,
+          "renderer": "webgl",
+          "webGlAvailable": true,
+          "rendererFallbackExpected": false,
           "screenshot": "main-firefox-mobile.png",
           "consoleErrors": [],
           "pageErrors": [],
@@ -31,7 +31,7 @@
   "observer": {},
   "visualScale": {},
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-07-31T04-40-41-509Z-1109-firefox__mobile__viewport",
+  "qaRunId": "v0.7.0-release-2026-08-01T01-49-38-631Z-65331-firefox__mobile__viewport",
   "evidenceDirectory": "public/review/v0.7.0-evidence/firefox__mobile__viewport",
   "requestedBrowsers": [
     "firefox"

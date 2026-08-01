@@ -146,6 +146,8 @@ export interface ScientificTemplateRuntime {
   pause(): void;
   reset(): void;
   focusObject(id: string): void;
+  zoomCamera(factor: number): void;
+  frameOverview(): void;
   createSnapshot(): TemplateSnapshot;
   restoreSnapshot(snapshot: TemplateSnapshot): Promise<void>;
   validate(): ValidationResult;

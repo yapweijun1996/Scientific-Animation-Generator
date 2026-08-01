@@ -1,0 +1,59 @@
+{
+  "version": "0.7.0",
+  "runAt": "2026-08-01T01:48:18.607Z",
+  "baseUrl": "http://127.0.0.1:51374/",
+  "browsers": [
+    {
+      "name": "webkit",
+      "viewports": [],
+      "interactions": {
+        "qualityCycle": [
+          "high",
+          "low",
+          "auto",
+          "high"
+        ],
+        "focusCycle": [
+          "moon",
+          "earth",
+          "saturn",
+          "moon"
+        ],
+        "snapshotRestored": true,
+        "pauseResume": true,
+        "reverseTime": true,
+        "exactDateJump": true,
+        "learnMode": true,
+        "eventJump": true,
+        "observerLocation": true,
+        "visualScaleModes": [
+          "learning",
+          "real-distance",
+          "real-scale"
+        ],
+        "sourcesAndAccuracy": true
+      }
+    }
+  ],
+  "downloads": {},
+  "standalone": [],
+  "offline": {},
+  "canvasFallback": {},
+  "mobileImmersion": {},
+  "simulationClock": {},
+  "scientificLearning": {},
+  "observer": {},
+  "visualScale": {},
+  "passed": true,
+  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-webkit__desktop__interactions",
+  "evidenceDirectory": "public/review/v0.7.0-evidence/webkit__desktop__interactions",
+  "requestedBrowsers": [
+    "webkit"
+  ],
+  "requestedViewports": [
+    "desktop"
+  ],
+  "requestedPhases": [
+    "interactions"
+  ]
+}

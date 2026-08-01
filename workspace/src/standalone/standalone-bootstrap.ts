@@ -104,6 +104,19 @@ export async function bootstrapStandalone(
   const pausedMissionEvents = new Set<string>();
   let lastMissionUiUpdateMs = 0;
   let missionUiUpdateTimer: number | undefined;
+  let lastPresentationUiUpdateMs = 0;
+  let presentationUiUpdateTimer: number | undefined;
+  const simulationDateFormatter = new Intl.DateTimeFormat('en-SG', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  });
+  const accuracyRegression = runScientificAccuracyRegression();
 
   const resize = (): void => runtime.resize(viewportFor(ui.scene));
   const setQuality = (quality: 'low' | 'auto' | 'high'): void => {
@@ -274,12 +287,11 @@ export async function bootstrapStandalone(
     );
 
     const metadata = astronomyEngine.metadata;
-    const regression = runScientificAccuracyRegression();
     ui.accuracySummary.replaceChildren();
     const accuracyTitle = document.createElement('strong');
     accuracyTitle.textContent = `${reportDateRangeContains(simulationDays) ? 'Educational Accuracy' : 'Outside Verified Range'} · ${metadata.name} ${metadata.version}`;
     const accuracyText = document.createElement('small');
-    accuracyText.textContent = `${metadata.supportedStartIso.slice(0, 10)} to ${metadata.supportedEndIso.slice(0, 10)} · ${regression.passCount}/${regression.checks.length} internal regression checks passed. ${metadata.expectedError}`;
+    accuracyText.textContent = `${metadata.supportedStartIso.slice(0, 10)} to ${metadata.supportedEndIso.slice(0, 10)} · ${accuracyRegression.passCount}/${accuracyRegression.checks.length} internal regression checks passed. ${metadata.expectedError}`;
     ui.accuracySummary.append(accuracyTitle, accuracyText);
     document.documentElement.dataset.accuracy = reportDateRangeContains(simulationDays) ? 'educational' : 'outside-range';
     document.documentElement.dataset.observerAtmosphere = String(atmosphere);
@@ -287,25 +299,36 @@ export async function bootstrapStandalone(
     document.documentElement.dataset.observerPresentation = presentation;
   };
 
+  const renderTimePresentation = (): void => {
+    lastPresentationUiUpdateMs = typeof performance === 'undefined' ? Date.now() : performance.now();
+    const date = simulationDaysToDate(simulationDays);
+    ui.simulationDate.textContent = simulationDateFormatter.format(date);
+    ui.simulationUtc.textContent = `UTC · ${date.toISOString()}`;
+    ui.timelineInput.value = String(Math.max(-36525, Math.min(36525, simulationDays)));
+    if (document.activeElement !== ui.dateInput) ui.dateInput.value = simulationDaysToLocalInput(simulationDays);
+    document.documentElement.dataset.simulationDays = simulationDays.toFixed(6);
+    if (ui.panel.open) updateScienceUi();
+  };
+
+  const scheduleTimePresentation = (): void => {
+    const now = typeof performance === 'undefined' ? Date.now() : performance.now();
+    const elapsed = now - lastPresentationUiUpdateMs;
+    if (elapsed >= 250) {
+      window.clearTimeout(presentationUiUpdateTimer);
+      presentationUiUpdateTimer = undefined;
+      renderTimePresentation();
+    } else if (presentationUiUpdateTimer === undefined) {
+      presentationUiUpdateTimer = window.setTimeout(() => {
+        presentationUiUpdateTimer = undefined;
+        renderTimePresentation();
+      }, Math.max(0, 250 - elapsed));
+    }
+  };
+
   const updateTimeUi = (days: number): void => {
     const previousDays = previousMissionSimulationDays;
     previousMissionSimulationDays = days;
     simulationDays = days;
-    const date = simulationDaysToDate(days);
-    ui.simulationDate.textContent = new Intl.DateTimeFormat('en-SG', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-      timeZone: 'UTC',
-    }).format(date);
-    ui.simulationUtc.textContent = `UTC · ${date.toISOString()}`;
-    ui.timelineInput.value = String(Math.max(-36525, Math.min(36525, days)));
-    if (document.activeElement !== ui.dateInput) ui.dateInput.value = simulationDaysToLocalInput(days);
-    document.documentElement.dataset.simulationDays = days.toFixed(6);
     if (mission?.active && mission.plan && mission.realism.autoPauseKeyEvents) {
       const crossed = missionStateMachine.crossedEvents(mission.plan, previousDays, days);
       const keyEvent = crossed.find((event) => event.id !== 'departure' && !pausedMissionEvents.has(event.id));
@@ -315,9 +338,9 @@ export async function bootstrapStandalone(
         ui.setStatus(`Mission paused · ${keyEvent.label}.`);
       }
     }
-    updateScienceUi();
+    scheduleTimePresentation();
     const now = typeof performance === 'undefined' ? Date.now() : performance.now();
-    if (!ui.panel.hidden) {
+    if (ui.panel.open) {
       const elapsed = now - lastMissionUiUpdateMs;
       if (elapsed >= 250) {
         window.clearTimeout(missionUiUpdateTimer);
@@ -328,7 +351,7 @@ export async function bootstrapStandalone(
         missionUiUpdateTimer = window.setTimeout(() => {
           missionUiUpdateTimer = undefined;
           lastMissionUiUpdateMs = typeof performance === 'undefined' ? Date.now() : performance.now();
-          if (!ui.panel.hidden) updateMissionUi();
+          if (ui.panel.open) updateMissionUi();
         }, Math.max(0, 250 - elapsed));
       }
     }
@@ -348,6 +371,10 @@ export async function bootstrapStandalone(
     },
   });
   await runtime.restoreSnapshot(config.snapshot);
+  ui.controlButton.addEventListener('click', () => {
+    renderTimePresentation();
+    updateMissionUi();
+  });
 
   const initialQuality = String(config.snapshot.parameters.quality ?? 'auto');
   setQuality(initialQuality === 'low' || initialQuality === 'high' ? initialQuality : 'auto');
@@ -459,6 +486,8 @@ export async function bootstrapStandalone(
     destroyed = true;
     window.clearTimeout(missionUiUpdateTimer);
     missionUiUpdateTimer = undefined;
+    window.clearTimeout(presentationUiUpdateTimer);
+    presentationUiUpdateTimer = undefined;
     resizeObserver?.disconnect();
     window.removeEventListener('resize', resize);
     ui.controlButton.removeEventListener('click', handleControlOpen);

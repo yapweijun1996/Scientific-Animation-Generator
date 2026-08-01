@@ -128,6 +128,13 @@ export class SolarCanvasFallback {
   private animationFrame = 0;
   private destroyed = false;
   private lastFrame = performance.now();
+  private performanceWindowStartedAt = 0;
+  private performanceWindowFrames = 0;
+  private performanceWindowFrameMs = 0;
+  private measuredFps = 0;
+  private averageFrameMs = 0;
+  private backgroundLayer?: HTMLCanvasElement;
+  private backgroundSignature = '';
   private stars = seededStars(420);
   private asteroids = seededAsteroids(900);
   private positionedPlanets: PositionedPlanet[] = [];
@@ -139,6 +146,7 @@ export class SolarCanvasFallback {
   private zoom = 1;
   private orbitCacheKey = '';
   private orbitPointCache = new Map<string, readonly Point[]>();
+  private orbitPathCache = new Map<string, Path2D>();
   private mission?: MissionSnapshot;
   private missionState?: MissionRuntimeState;
 
@@ -165,6 +173,7 @@ export class SolarCanvasFallback {
 
   setParameters(parameters: ParameterMap): void {
     const previousQuality = qualityParameter(this.parameters);
+    const previousShowStars = booleanParameter(this.parameters, 'showStars', true);
     const previousScaleMode = scaleModeParameter(this.parameters);
     const previousVisualMode = visualModeParameter(this.parameters);
     const previousDistanceScale = numericParameter(this.parameters, 'distanceScale', 1);
@@ -178,10 +187,15 @@ export class SolarCanvasFallback {
     if (distanceModelChanged) {
       this.orbitCacheKey = '';
       this.orbitPointCache.clear();
+      this.orbitPathCache.clear();
       this.manualOffset = { x: 0, y: 0 };
       if (this.focusedObject === 'sun') this.zoom = 1;
       else this.focusObject(this.focusedObject);
     }
+    if (
+      previousQuality !== qualityParameter(this.parameters)
+      || previousShowStars !== booleanParameter(this.parameters, 'showStars', true)
+    ) this.backgroundSignature = '';
     this.requestRender();
   }
 
@@ -218,6 +232,7 @@ export class SolarCanvasFallback {
     this.canvas.style.width = `${Math.max(1, viewport.width)}px`;
     this.canvas.style.height = `${Math.max(1, viewport.height)}px`;
     this.drawing?.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.backgroundSignature = '';
     this.requestRender();
   }
 
@@ -236,6 +251,36 @@ export class SolarCanvasFallback {
     this.manualOffset = { x: 0, y: 0 };
     this.zoom = 1;
     this.focusObject('sun');
+  }
+
+  zoomCamera(factor: number): void {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    const maximumZoom = scaleModeParameter(this.parameters) === 'learning' ? 22 : 80_000;
+    this.zoom = Math.max(0.55, Math.min(maximumZoom, this.zoom / factor));
+    this.requestRender();
+  }
+
+  frameOverview(): void {
+    this.focusedObject = 'sun';
+    this.manualOffset = { x: 0, y: 0 };
+    this.zoom = 1;
+    this.requestRender();
+    this.context?.onFocusChange?.('sun');
+    this.context?.onStatus?.('Framed whole solar system · Canvas 2D mode');
+  }
+
+  getViewDiagnostics(): {
+    cameraDistance: number;
+    measuredFps: number;
+    averageFrameMs: number;
+    effectiveQuality: 'low' | 'auto' | 'high';
+  } {
+    return {
+      cameraDistance: 1 / Math.max(0.00001, this.zoom),
+      measuredFps: this.measuredFps,
+      averageFrameMs: this.averageFrameMs,
+      effectiveQuality: qualityParameter(this.parameters),
+    };
   }
 
   focusObject(id: string): void {
@@ -358,6 +403,7 @@ export class SolarCanvasFallback {
     this.canvas?.removeEventListener('pointercancel', this.handlePointerUp);
     this.canvas?.removeEventListener('wheel', this.handleWheel);
     this.orbitPointCache.clear();
+    this.orbitPathCache.clear();
     this.canvas?.remove();
   }
 
@@ -372,6 +418,11 @@ export class SolarCanvasFallback {
 
   private animate = (now = performance.now()): void => {
     this.animationFrame = 0;
+    const elapsedMs = now - this.lastFrame;
+    if (this.playing && elapsedMs < 1_000 / 30) {
+      this.requestRender();
+      return;
+    }
     const deltaSeconds = Math.min(0.1, Math.max(0, (now - this.lastFrame) / 1000));
     this.lastFrame = now;
     const step = stepSimulationClock(this.simulationDays, this.playbackRate, deltaSeconds, this.playing);
@@ -380,10 +431,25 @@ export class SolarCanvasFallback {
       this.updateMissionState();
       this.context?.onSimulationTime?.(this.simulationDays);
     }
+    const drawStartedAt = performance.now();
     this.draw();
+    this.recordDrawPerformance(performance.now() - drawStartedAt, now);
     this.context?.onFrameRendered?.();
     if (this.playing) this.requestRender();
   };
+
+  private recordDrawPerformance(frameMs: number, now: number): void {
+    if (this.performanceWindowStartedAt === 0) this.performanceWindowStartedAt = now;
+    this.performanceWindowFrames += 1;
+    this.performanceWindowFrameMs += frameMs;
+    const elapsed = now - this.performanceWindowStartedAt;
+    if (elapsed < 2_000) return;
+    this.measuredFps = this.performanceWindowFrames / Math.max(0.001, elapsed / 1_000);
+    this.averageFrameMs = this.performanceWindowFrameMs / Math.max(1, this.performanceWindowFrames);
+    this.performanceWindowStartedAt = now;
+    this.performanceWindowFrames = 0;
+    this.performanceWindowFrameMs = 0;
+  }
 
   private orbitPosition(planet: PlanetDefinition, simulationDays = this.simulationDays): Point {
     const position = planetPositionAu(planet, simulationDays);
@@ -469,15 +535,7 @@ export class SolarCanvasFallback {
     const width = Math.max(1, this.viewport.width);
     const height = Math.max(1, this.viewport.height);
     context.clearRect(0, 0, width, height);
-
-    const background = context.createRadialGradient(width * 0.5, height * 0.45, 0, width * 0.5, height * 0.45, Math.max(width, height) * 0.72);
-    background.addColorStop(0, '#07152a');
-    background.addColorStop(0.5, '#030914');
-    background.addColorStop(1, '#01030a');
-    context.fillStyle = background;
-    context.fillRect(0, 0, width, height);
-
-    if (booleanParameter(this.parameters, 'showStars', true)) this.drawStars(context, width, height);
+    this.drawCachedBackground(context, width, height);
 
     const earth = EARTH;
     const earthWorld = this.orbitPosition(earth);
@@ -551,6 +609,27 @@ export class SolarCanvasFallback {
     });
     drawables.sort((a, b) => a.y - b.y).forEach((entry) => entry.draw());
     this.drawSpacecraft(context, origin, scale);
+  }
+
+  private drawCachedBackground(context: CanvasRenderingContext2D, width: number, height: number): void {
+    const signature = `${Math.round(width)}:${Math.round(height)}:${booleanParameter(this.parameters, 'showStars', true)}`;
+    if (!this.backgroundLayer || this.backgroundSignature !== signature) {
+      this.backgroundLayer = document.createElement('canvas');
+      this.backgroundLayer.width = Math.max(1, Math.round(width));
+      this.backgroundLayer.height = Math.max(1, Math.round(height));
+      const layer = this.backgroundLayer.getContext('2d');
+      if (layer) {
+        const background = layer.createRadialGradient(width * 0.5, height * 0.45, 0, width * 0.5, height * 0.45, Math.max(width, height) * 0.72);
+        background.addColorStop(0, '#07152a');
+        background.addColorStop(0.5, '#030914');
+        background.addColorStop(1, '#01030a');
+        layer.fillStyle = background;
+        layer.fillRect(0, 0, width, height);
+        if (booleanParameter(this.parameters, 'showStars', true)) this.drawStars(layer, width, height);
+      }
+      this.backgroundSignature = signature;
+    }
+    if (this.backgroundLayer) context.drawImage(this.backgroundLayer, 0, 0, width, height);
   }
 
   private updateMissionState(): void {
@@ -654,6 +733,7 @@ export class SolarCanvasFallback {
     if (cacheKey !== this.orbitCacheKey) {
       this.orbitCacheKey = cacheKey;
       this.orbitPointCache.clear();
+      this.orbitPathCache.clear();
     }
 
     const cached = this.orbitPointCache.get(planet.id);
@@ -669,18 +749,23 @@ export class SolarCanvasFallback {
   private drawOrbits(context: CanvasRenderingContext2D, origin: Point, scale: number, earthWorld: Point): void {
     context.save();
     context.strokeStyle = 'rgba(109,139,173,0.25)';
-    context.lineWidth = 1;
+    context.translate(origin.x, origin.y);
+    context.scale(scale, scale);
+    context.lineWidth = 1 / Math.max(0.00001, scale);
     PLANETS.forEach((planet) => {
-      context.beginPath();
-      this.orbitPointsFor(planet).forEach((mapped, index) => {
-        const screenX = origin.x + mapped.x * scale;
-        const screenY = origin.y + mapped.y * scale;
-        if (index === 0) context.moveTo(screenX, screenY);
-        else context.lineTo(screenX, screenY);
-      });
-      context.closePath();
-      context.stroke();
+      let path = this.orbitPathCache.get(planet.id);
+      if (!path) {
+        path = new Path2D();
+        this.orbitPointsFor(planet).forEach((mapped, index) => {
+          if (index === 0) path?.moveTo(mapped.x, mapped.y);
+          else path?.lineTo(mapped.x, mapped.y);
+        });
+        path.closePath();
+        this.orbitPathCache.set(planet.id, path);
+      }
+      context.stroke(path);
     });
+    context.restore();
 
     const earth = EARTH;
     const moonOrbitRadius = this.moonOrbitRadius() * scale;
@@ -697,7 +782,6 @@ export class SolarCanvasFallback {
       TAU,
     );
     context.stroke();
-    context.restore();
   }
 
   private drawSun(context: CanvasRenderingContext2D, center: Point, radius: number): void {

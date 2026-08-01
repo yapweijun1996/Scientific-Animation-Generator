@@ -53,6 +53,12 @@ import {
 import { PlanetPolishSystem, atmosphereScaleFor, type PlanetPolishQuality } from './planet-polish';
 import { SpacecraftMissionVisual } from '../../travel/spacecraft-mission-visual';
 import type { MissionCameraMode, MissionFollowDistance, MissionRuntimeState, MissionSnapshot } from '../../travel/types';
+import {
+  AutoQualityPolicy,
+  isSoftwareRenderer,
+  pixelRatioForQuality,
+  type AutoQualityTier,
+} from './render-performance-policy';
 
 interface WorkerStateMessage {
   type: 'state';
@@ -105,6 +111,9 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   private resizeState: ViewportSize = { width: 1, height: 1, pixelRatio: 1 };
   private animationFrame = 0;
   private destroyed = false;
+  private adaptiveQuality = new AutoQualityPolicy(false);
+  private softwareRenderer = false;
+  private lastRenderedAt = 0;
   // Scratch state reused every frame so the label pass allocates nothing.
   private readonly scratchVector = new THREE.Vector3();
   private readonly labelCandidates: Array<{ id: string; label: HTMLElement; x: number; y: number; priority: number }> = [];
@@ -187,6 +196,16 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.renderer.domElement.className = 'solar-canvas';
     this.renderer.domElement.setAttribute('aria-label', 'Interactive 3D solar system preview');
     this.stage.prepend(this.renderer.domElement);
+
+    const gl = this.renderer.getContext();
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    const rendererName = String(
+      debugInfo
+        ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER),
+    );
+    this.softwareRenderer = isSoftwareRenderer(rendererName);
+    this.adaptiveQuality = new AutoQualityPolicy(this.softwareRenderer);
 
     this.visualAssets = createSolarVisualAssets(this.renderer, PLANETS);
 
@@ -735,11 +754,20 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     return this.playing;
   }
 
-  private animate = (): void => {
+  private animate = (now = performance.now()): void => {
     this.animationFrame = 0;
+    const requestedQuality = qualityParameter(this.parameters);
+    const autoTier = this.adaptiveQuality.snapshot().tier;
+    const minimumFrameInterval = requestedQuality === 'auto' && autoTier !== 'normal' ? 1_000 / 30 : 0;
+    if (minimumFrameInterval > 0 && now - this.lastRenderedAt < minimumFrameInterval) {
+      if (this.needsContinuousRender()) this.requestRender();
+      return;
+    }
+    this.lastRenderedAt = now;
+    const frameStartedAt = performance.now();
     // OrbitControls damping settles over several frames after the pointer is released.
     const cameraMoved = this.controls?.update() ?? false;
-    if (this.playing) {
+    if (this.playing && !(requestedQuality === 'auto' && autoTier === 'safe')) {
       if (this.sun) this.sun.rotation.y += 0.0011;
       if (this.sunHalo) this.sunHalo.material.rotation += 0.00015;
       if (this.stars) this.stars.rotation.y += 0.000003;
@@ -749,6 +777,13 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.updateLabels();
     if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
     this.context?.onFrameRendered?.();
+    if (requestedQuality === 'auto') {
+      const nextTier = this.adaptiveQuality.recordFrame(performance.now() - frameStartedAt, now);
+      if (nextTier) {
+        this.applyQuality();
+        this.context?.onStatus?.(`Adaptive quality · ${nextTier}`);
+      }
+    }
     if (cameraMoved || this.needsContinuousRender()) this.requestRender();
   };
 
@@ -824,6 +859,11 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     occupied.length = 0;
     const offsets = [-18, 18, -34, 34, -50];
     for (const { id, label, x, y } of candidates) {
+      const autoTier = this.adaptiveQuality.snapshot().tier;
+      if (qualityParameter(this.parameters) === 'auto' && autoTier === 'safe' && id !== this.focusedObject && id !== 'sun' && id !== 'earth') {
+        this.commitLabelStyle(id, label, false);
+        continue;
+      }
       const estimatedWidth = Math.max(42, (label.textContent?.length ?? 4) * 7 + 16);
       const estimatedHeight = 22;
       let placed = false;
@@ -913,18 +953,15 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   private applyQuality(): void {
     if (!this.renderer) return;
     const quality = qualityParameter(this.parameters);
-    const requestedRatio =
-      quality === 'low'
-        ? 1
-        : quality === 'high'
-          ? Math.min(2.25, window.devicePixelRatio || 1)
-          : Math.min(1.65, window.devicePixelRatio || 1);
+    const autoTier = this.adaptiveQuality.snapshot().tier;
+    const requestedRatio = pixelRatioForQuality(quality, autoTier, window.devicePixelRatio || 1);
     this.renderer.setPixelRatio(requestedRatio);
     this.renderer.setSize(this.resizeState.width, this.resizeState.height, false);
-    this.planetPolish?.applyQuality(quality as PlanetPolishQuality, this.focusedObject);
-    this.moonVisual?.applyQuality(quality as MoonQuality, this.focusedObject);
+    const assetQuality = quality === 'auto' && autoTier !== 'normal' ? 'low' : quality;
+    this.planetPolish?.applyQuality(assetQuality as PlanetPolishQuality, this.focusedObject);
+    this.moonVisual?.applyQuality(assetQuality as MoonQuality, this.focusedObject);
     // Texture work resolves asynchronously, so wake the loop again once it lands.
-    void this.realTextures?.applyQuality(quality as PlanetTextureQuality, this.focusedObject).then(this.requestRender);
+    void this.realTextures?.applyQuality(assetQuality as PlanetTextureQuality, this.focusedObject).then(this.requestRender);
     this.requestRender();
   }
 
@@ -976,6 +1013,8 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
 
   play(): void {
     this.playing = true;
+    this.adaptiveQuality.reset(performance.now());
+    this.lastRenderedAt = 0;
     if (this.fallback) {
       this.fallback.play();
       return;
@@ -1001,6 +1040,35 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     }
     this.worker?.postMessage({ type: 'reset' });
     this.focusObject('sun');
+  }
+
+  zoomCamera(factor: number): void {
+    if (this.fallback) {
+      this.fallback.zoomCamera(factor);
+      return;
+    }
+    if (!this.camera || !this.controls || !Number.isFinite(factor) || factor <= 0) return;
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    const distance = THREE.MathUtils.clamp(
+      offset.length() * factor,
+      this.controls.minDistance,
+      this.controls.maxDistance,
+    );
+    this.camera.position.copy(this.controls.target).add(offset.setLength(distance));
+    this.controls.update();
+    this.requestRender();
+  }
+
+  frameOverview(): void {
+    if (this.fallback) {
+      this.fallback.frameOverview();
+      return;
+    }
+    this.focusedObject = 'sun';
+    this.context?.onFocusChange?.('sun');
+    this.frameSolarOverview();
+    this.context?.onStatus?.('Framed whole solar system');
+    this.requestRender();
   }
 
   focusObject(id: string): void {
@@ -1148,15 +1216,28 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       : scaleMode === 'real-distance'
         ? realDistanceSunVisualRadius(PLANETS, distanceScale)
         : 1.35 * this.sunVisualScale();
+    const requestedQuality = qualityParameter(this.parameters);
+    const performance = this.adaptiveQuality.snapshot();
+    const fallbackView = this.fallback?.getViewDiagnostics();
     const base = {
       renderer: this.fallback ? ('canvas-2d' as const) : ('webgl' as const),
+      requestedQuality,
+      effectiveQuality: this.fallback
+        ? fallbackView?.effectiveQuality ?? requestedQuality
+        : requestedQuality === 'auto' ? performance.tier : requestedQuality,
+      autoQualityTier: this.fallback ? ('normal' as AutoQualityTier) : performance.tier,
+      softwareRenderer: this.fallback ? false : performance.softwareRenderer,
+      measuredFps: this.fallback ? fallbackView?.measuredFps ?? 0 : performance.fps,
+      averageFrameMs: this.fallback ? fallbackView?.averageFrameMs ?? 0 : performance.averageFrameMs,
       scaleMode,
       systemVisualRadius: this.systemVisualRadius(),
       sunVisualRadius,
       earthVisualRadius: earthRadius,
       moonVisualRadius: this.moonBodyVisualRadius(earthRadius),
       moonOrbitVisualRadius: this.moonOrbitVisualRadius(earthRadius),
-      cameraDistance: this.camera && this.controls ? this.camera.position.distanceTo(this.controls.target) : 0,
+      cameraDistance: this.camera && this.controls
+        ? this.camera.position.distanceTo(this.controls.target)
+        : fallbackView?.cameraDistance ?? 0,
       cameraAspect: this.camera?.aspect ?? 0,
       mission: this.fallback?.getMissionDiagnostics() ?? this.spacecraftMission?.getDiagnostics(),
     };

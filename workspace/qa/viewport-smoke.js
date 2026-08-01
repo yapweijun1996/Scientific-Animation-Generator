@@ -131,6 +131,98 @@ async function run() {
   if (forceCanvas) assert(state.renderer === 'canvas-2d', `Forced Canvas rendered as ${state.renderer}.`);
   else if (browserName === 'chromium' || browserName === 'webkit') assert(state.renderer === 'webgl', `${browserName} rendered as ${state.renderer}.`);
 
+  const controlTrigger = viewportName === 'desktop' ? '#open-control-center-button' : '#floating-control-button';
+  await page.locator(controlTrigger).click();
+  await page.waitForTimeout(80);
+  const dialogOpen = await page.evaluate(() => {
+    const dialog = document.querySelector('#control-center');
+    const active = document.activeElement;
+    const body = document.querySelector('.control-center-body');
+    if (!(dialog instanceof HTMLDialogElement) || !(body instanceof HTMLElement)) return null;
+    const scrollSamples = [];
+    for (const ratio of [0, 0.5, 1]) {
+      body.scrollTop = (body.scrollHeight - body.clientHeight) * ratio;
+      scrollSamples.push(body.scrollTop);
+    }
+    return {
+      open: dialog.open,
+      focusedInside: active instanceof Element && dialog.contains(active),
+      scrollable: body.scrollHeight >= body.clientHeight,
+      scrollSamples,
+      ariaValueText: document.querySelector('#timescale-input')?.getAttribute('aria-valuetext'),
+    };
+  });
+  assert(dialogOpen?.open, 'Control Center did not open as a native dialog.');
+  assert(dialogOpen.focusedInside, 'Initial Control Center focus is outside the dialog.');
+  assert(Boolean(dialogOpen.ariaValueText), 'Time scale is missing aria-valuetext.');
+  await page.screenshot({ path: join(evidence, `viewport-${browserName}-${viewportName}-controls-open.png`) });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(40);
+  const escaped = await page.evaluate((selector) => ({
+    open: (document.querySelector('#control-center')) instanceof HTMLDialogElement
+      ? document.querySelector('#control-center').open
+      : true,
+    focusRestored: document.activeElement === document.querySelector(selector),
+  }), controlTrigger);
+  assert(!escaped.open, 'Escape did not close the Control Center.');
+  assert(escaped.focusRestored, 'Control Center did not restore focus to its trigger.');
+  await page.locator(controlTrigger).click();
+  await page.waitForTimeout(40);
+  await page.locator('#control-center').click({ position: { x: 4, y: 4 } });
+  await page.waitForTimeout(40);
+  assert(!(await page.locator('#control-center').evaluate((dialog) => dialog.open)), 'Backdrop click did not close the Control Center.');
+
+  let performanceResult;
+  if (!forceCanvas && viewportName === 'desktop') {
+    const beforeZoom = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    await page.locator('[data-view-control="zoom-in"]').click();
+    const afterZoom = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(
+      Number(afterZoom?.cameraDistance) < Number(beforeZoom?.cameraDistance),
+      'WebGL Zoom In did not change camera distance.',
+    );
+    await page.locator('[data-view-control="reframe"]').click();
+    const reframed = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(Number(reframed?.cameraDistance) > 0, 'WebGL Frame Overview produced an invalid camera distance.');
+  }
+  if (forceCanvas && viewportName === 'desktop') {
+    const beforeZoom = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    await page.locator('[data-view-control="zoom-in"]').click();
+    const afterZoom = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(
+      Number(afterZoom?.cameraDistance) < Number(beforeZoom?.cameraDistance),
+      'Canvas Zoom In did not change camera distance.',
+    );
+    await page.locator('[data-view-control="reframe"]').click();
+    const reframed = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(Math.abs(Number(reframed?.cameraDistance) - 1) < 0.001, 'Canvas Frame Overview did not restore overview zoom.');
+
+    performanceResult = await page.evaluate(async () => {
+      window.__SCIENCE_QA__?.setPlaying(true);
+      await new Promise((resolveWarmup) => setTimeout(resolveWarmup, 2_000));
+      const longTasks = [];
+      const observer = new PerformanceObserver((list) => {
+        longTasks.push(...list.getEntries().map((entry) => entry.duration));
+      });
+      observer.observe({ type: 'longtask', buffered: false });
+      await new Promise((resolveSample) => setTimeout(resolveSample, 5_000));
+      observer.disconnect();
+      const diagnostics = window.__SCIENCE_QA__?.getVisualDiagnostics();
+      window.__SCIENCE_QA__?.setPlaying(false);
+      await new Promise((resolveIdle) => setTimeout(resolveIdle, 2_000));
+      return {
+        fps: Number(diagnostics?.measuredFps ?? 0),
+        averageFrameMs: Number(diagnostics?.averageFrameMs ?? 0),
+        longTaskCount: longTasks.length,
+        longTaskTotalMs: longTasks.reduce((sum, duration) => sum + duration, 0),
+        idleLabel: document.querySelector('#fps-meter')?.textContent ?? '',
+      };
+    });
+    assert(performanceResult.fps >= 24, `Canvas FPS ${performanceResult.fps.toFixed(1)} is below the CI floor.`);
+    assert(performanceResult.longTaskTotalMs < 500, `Canvas long tasks total ${performanceResult.longTaskTotalMs.toFixed(1)} ms.`);
+    assert(performanceResult.idleLabel === 'idle', `Paused renderer did not become idle: ${performanceResult.idleLabel}`);
+  }
+
   const external = requests.filter((url) => /^https?:/i.test(url) && !url.startsWith(baseUrl));
   assert(external.length === 0, `External requests: ${external.join(', ')}`);
   assert(consoleErrors.length === 0, `Console errors: ${consoleErrors.join(' | ')}`);
@@ -153,6 +245,11 @@ async function run() {
     observerOptions: startup.observers,
     focusCount: state.focusCount,
     noHorizontalOverflow: true,
+    nativeDialog: true,
+    escapeClose: true,
+    backdropClose: true,
+    focusRestore: true,
+    performance: performanceResult,
     externalRequests: 0,
     consoleErrors,
     pageErrors,

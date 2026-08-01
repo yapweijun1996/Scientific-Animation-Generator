@@ -624,7 +624,10 @@ async function runDesktopInteractions(browserName, browser) {
     assert((htmlText.match(/<script\b/gi) ?? []).length === 1, 'Standalone HTML does not contain exactly one script.');
     assert(!/<script\b[^>]*\bsrc\s*=/i.test(htmlText), 'Standalone HTML contains an external script tag.');
     assert(!/(unpkg|jsdelivr|cdnjs|esm\.sh|skypack)/i.test(htmlText), 'Standalone HTML contains a CDN reference.');
-    assert(htmlText.includes('Scientific Learning & Observation') && htmlText.includes('standalone-control-button'), 'Standalone v0.6 scientific UI is missing.');
+    // 'Scientific Learning & Observation' was a v0.6 heading that no longer exists anywhere in
+    // source; 'standalone-science-summary' is the class the current UI actually assigns to the
+    // object/moon-phase/mission/accuracy summary panels (standalone-ui.ts), so it is a real marker.
+    assert(htmlText.includes('standalone-science-summary') && htmlText.includes('standalone-control-button'), 'Standalone v0.7 scientific UI is missing.');
     assert(htmlText.includes('standalone-scale') && htmlText.includes('standalone-event') && htmlText.includes('standalone-observer'), 'Standalone scientific controls are missing.');
     results.downloads.standalone = { filename: htmlDownload.suggestedFilename(), bytes: htmlBytes.length, sha256: sha256(htmlBytes) };
 
@@ -717,11 +720,15 @@ async function verifyStandaloneFile(browserName, browser) {
 }
 
 async function verifyOffline(browser) {
+  // Always invoked with browserName === 'chromium' on the mobile viewport (see call site);
+  // this function is not parameterized by browser or viewport, so the label is a fixed string
+  // rather than the browserName/viewportName locals from the caller's closure, which are not
+  // in scope here.
   const context = await browser.newContext({ viewport: { width: viewports.mobile.width, height: viewports.mobile.height }, hasTouch: true });
   const page = await context.newPage();
   await page.goto(qaBridgeUrl(), { waitUntil: 'domcontentloaded', timeout: 90_000 });
-  await waitForRuntime(page, browserName + '/' + viewportName + ' runtime');
-  await waitForEditorUi(page, browserName + '/' + viewportName + ' editor UI');
+  await waitForRuntime(page, 'chromium/mobile offline runtime');
+  await waitForEditorUi(page, 'chromium/mobile offline editor UI');
   await page.evaluate(async () => { await navigator.serviceWorker?.ready; });
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 });
   await waitForRuntime(page);
@@ -768,7 +775,9 @@ async function verifyCanvasFallback(browser) {
   for (const value of ['low', 'auto', 'high', 'low']) await page.locator('.inspector-panel [data-parameter="quality"]').selectOption(value);
   const fallbackScale = page.locator('.inspector-panel [data-parameter=scaleMode]');
   for (const value of ['real-distance', 'real-scale', 'learning', 'real-distance']) await fallbackScale.selectOption(value);
-  await selectOptionStable(page, '#focus-select', 'sun', browserName + ' Sun focus');
+  // Always invoked with browserName === 'chromium' (see call site); browserName is not in
+  // scope here since this is a top-level function, not a closure inside runBrowser.
+  await selectOptionStable(page, '#focus-select', 'sun', 'chromium canvas-fallback Sun focus');
   await page.waitForTimeout(450);
   if (captureScreenshots) {
     await page.screenshot({ path: join(evidenceDir, 'real-distance-overview-canvas.png') });
