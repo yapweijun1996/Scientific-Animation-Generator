@@ -1,6 +1,7 @@
 import { simulationDaysToDate } from '../core/simulation-clock';
 import { baselineAstronomyEngine } from './baseline-astronomy-engine';
 import type { EventLocationComparison, ObserverLocation } from './types';
+import type { AppLocale } from '../i18n';
 
 const STORAGE_KEY = 'solar-explorer-v06-observer-locations';
 const ACTIVE_KEY = 'solar-explorer-v06-active-location';
@@ -107,12 +108,12 @@ export class ObserverLocationService {
     );
   }
 
-  compare(objectId: string, simulationDays: number, locations = this.list()): EventLocationComparison[] {
+  compare(objectId: string, simulationDays: number, locations = this.list(), locale: AppLocale = 'en'): EventLocationComparison[] {
     const date = simulationDaysToDate(simulationDays);
     return locations.map((location) => ({
       location,
       horizontal: baselineAstronomyEngine.horizontalPosition(objectId, simulationDays, location),
-      localTimeLabel: new Intl.DateTimeFormat('en', {
+      localTimeLabel: new Intl.DateTimeFormat(locale === 'zh-CN' ? 'zh-CN' : 'en-SG', {
         dateStyle: 'medium',
         timeStyle: 'short',
         timeZone: safeTimeZone(location.timeZone),

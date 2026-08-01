@@ -2,7 +2,7 @@ import type { PlanetId } from '../templates/solar-system/planet-data';
 
 export type MissionType = 'flyby' | 'orbiter';
 export type MissionRouteKind = 'earth-orbit' | 'hohmann' | 'direct' | 'gravity-assist';
-export type MissionCameraMode = 'follow' | 'free';
+export type MissionCameraMode = 'follow' | 'pilot' | 'free';
 export type MissionFollowDistance = 'near' | 'standard' | 'far';
 export type MissionComplexity = 'introductory' | 'inner-system' | 'outer-system' | 'deep-space';
 export type MissionStatus =
@@ -16,6 +16,11 @@ export type MissionStatus =
   | 'flyby-complete'
   | 'orbit-achieved'
   | 'invalid';
+export type MissionRejectionCode =
+  | 'insufficient-delta-v'
+  | 'launch-solution-not-converged'
+  | 'earth-requires-orbiter'
+  | 'earth-orbit-insufficient-fuel';
 
 export interface Vector3Au {
   x: number;
@@ -62,6 +67,7 @@ export interface MissionPlan {
   version: '1.0';
   valid: boolean;
   rejectionReason?: string;
+  rejectionCode?: MissionRejectionCode;
   originId: 'earth';
   destinationId: PlanetId;
   destinationName: string;
@@ -113,6 +119,12 @@ export interface MissionSnapshot {
   cameraMode: MissionCameraMode;
   followDistance: MissionFollowDistance;
   realism: MissionRealismOptions;
+  pilot?: MissionPilotSnapshot;
+}
+
+export interface MissionPilotSnapshot {
+  /** Camera-relative visual training offset, normalized to the current pilot envelope. */
+  offset: [number, number, number];
 }
 
 export interface DestinationSummary {

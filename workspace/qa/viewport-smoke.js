@@ -11,12 +11,18 @@ const forceCanvas = process.env.VIEWPORT_QA_FORCE_CANVAS === '1';
 const browserType = { chromium, firefox, webkit }[browserName];
 const sizes = {
   desktop: { width: 1280, height: 800, hasTouch: false },
+  wideEdge: { width: 1200, height: 800, hasTouch: false },
+  compactEdge: { width: 1199, height: 800, hasTouch: false },
+  compactDesktop: { width: 1117, height: 837, hasTouch: false },
   compact: { width: 891, height: 786, hasTouch: true },
+  zoomEquivalent: { width: 640, height: 800, hasTouch: false },
   tablet: { width: 768, height: 1024, hasTouch: true },
   mobile: { width: 390, height: 844, hasTouch: true },
 };
 const size = sizes[viewportName];
 if (!browserType || !size) throw new Error('Unsupported browser or viewport.');
+const immersiveShell = size.width <= 900 || (size.height > size.width && size.width <= 1100);
+const compactShell = !immersiveShell && size.width < 1200;
 if (!existsSync(join(dist, 'index.html'))) throw new Error('dist/index.html is missing.');
 
 const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${browserName}-${viewportName}-${process.pid}`;
@@ -104,7 +110,7 @@ async function run() {
     const canvas = document.querySelector('#runtime-viewport canvas');
     const visible = (selector) => {
       const element = document.querySelector(selector);
-      return element instanceof HTMLElement && !element.hidden && getComputedStyle(element).display !== 'none';
+      return element instanceof HTMLElement && !element.hidden && getComputedStyle(element).display !== 'none' && element.getClientRects().length > 0;
     };
     return {
       title: document.title,
@@ -114,6 +120,9 @@ async function run() {
       topbar: visible('.topbar'),
       toolbar: visible('.workspace-toolbar'),
       floating: visible('#floating-control-button'),
+      shellMode: document.querySelector('.app-shell')?.dataset.responsiveShell,
+      topLocale: visible('#topbar-locale-select'),
+      mobileLocale: visible('#mobile-locale-select'),
       bodyWidth: document.body.scrollWidth,
       innerWidth: window.innerWidth,
       travelTab: document.querySelectorAll('[data-control-tab="travel"]').length,
@@ -132,11 +141,16 @@ async function run() {
   assert(state.focusCount === 10, `Expected 10 celestial objects, received ${state.focusCount}.`);
   assert(state.travelTab === 1 && state.learnTab === 1 && state.observeTab === 1, 'Control Center tabs are incomplete.');
   assert(state.bodyWidth <= state.innerWidth + 1, `Horizontal overflow ${state.bodyWidth} > ${state.innerWidth}.`);
-  if (viewportName === 'desktop') {
+  if (!immersiveShell) {
     assert(state.topbar && state.toolbar, 'Desktop shell is hidden.');
     assert(!state.topbarGroupsOverlap, 'Topbar project controls overlap the action buttons.');
+    assert(state.topLocale && !state.mobileLocale, 'Desktop language selector visibility is incorrect.');
   }
-  else assert(!state.topbar && !state.toolbar && state.floating, 'Mobile/tablet immersive shell is incorrect.');
+  else {
+    assert(!state.topbar && !state.toolbar && state.floating, 'Mobile/tablet immersive shell is incorrect.');
+    assert(!state.topLocale, 'Immersive shell exposed the desktop language selector.');
+  }
+  assert(state.shellMode === (immersiveShell ? 'immersive' : compactShell ? 'compact' : 'wide'), `Unexpected responsive shell mode ${state.shellMode}.`);
   if (forceCanvas) assert(state.renderer === 'canvas-2d', `Forced Canvas rendered as ${state.renderer}.`);
   else if (browserName === 'chromium' || browserName === 'webkit') assert(state.renderer === 'webgl', `${browserName} rendered as ${state.renderer}.`);
 
@@ -178,7 +192,106 @@ async function run() {
     assert(bodyLabelOverlaps.length === 0, `Compact overview label/body overlap: ${bodyLabelOverlaps.join(', ')}`);
   }
 
-  const controlTrigger = viewportName === 'desktop' ? '#open-control-center-button' : '#floating-control-button';
+  await page.evaluate(() => window.__SCIENCE_QA__?.setPlaying(false));
+  await page.waitForTimeout(80);
+  const labelToggle = page.locator('#parameter-controls-extra input[data-parameter="showLabels"]');
+  await labelToggle.evaluate((input) => {
+    input.checked = false;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(120);
+  const labelsDisabled = await page.evaluate(() => ({
+    parameter: window.__SCIENCE_QA__?.getRuntimeSnapshot().parameters.showLabels,
+    visibleLabels: [...document.querySelectorAll('.planet-label:not(.spacecraft-label)')]
+      .filter((label) => !label.hidden && getComputedStyle(label).display !== 'none')
+      .map((label) => label.textContent ?? ''),
+  }));
+  assert(labelsDisabled.parameter === false, 'Planet label toggle did not reach the runtime snapshot.');
+  assert(labelsDisabled.visibleLabels.length === 0, `Disabled planet labels remained visible: ${labelsDisabled.visibleLabels.join(', ')}`);
+
+  await labelToggle.evaluate((input) => {
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(120);
+  const labelsRestored = await page.evaluate(() => ({
+    parameter: window.__SCIENCE_QA__?.getRuntimeSnapshot().parameters.showLabels,
+    visibleLabels: [...document.querySelectorAll('.planet-label:not(.spacecraft-label)')]
+      .filter((label) => !label.hidden && getComputedStyle(label).display !== 'none').length,
+  }));
+  assert(labelsRestored.parameter === true, 'Planet label toggle did not restore the runtime parameter.');
+  if (!forceCanvas) assert(labelsRestored.visibleLabels > 0, 'Planet labels did not return after re-enabling the toggle.');
+  await page.evaluate(() => window.__SCIENCE_QA__?.setPlaying(true));
+
+  let drawerResult;
+  if (compactShell) {
+    const workspaceBefore = await page.locator('.workspace').boundingBox();
+    const templatesHitTarget = await page.evaluate(() => {
+      const button = document.querySelector('#toggle-templates-panel');
+      const rect = button?.getBoundingClientRect();
+      if (!rect) return null;
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return { rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, hit: hit?.closest('button')?.id ?? hit?.tagName ?? null };
+    });
+    assert(templatesHitTarget?.hit === 'toggle-templates-panel', `Templates trigger is covered: ${JSON.stringify(templatesHitTarget)}`);
+    await page.locator('#toggle-templates-panel').click();
+    await page.waitForTimeout(220);
+    const templatesOpen = await page.evaluate(() => ({
+      drawer: document.querySelector('.app-shell')?.dataset.compactDrawer,
+      visible: document.querySelector('#templates-panel')?.getAttribute('aria-hidden') === 'false',
+      inspectorHidden: document.querySelector('#inspector-panel')?.getAttribute('aria-hidden') === 'true',
+      role: document.querySelector('#templates-panel')?.getAttribute('role'),
+      modal: document.querySelector('#templates-panel')?.getAttribute('aria-modal'),
+      focusedInside: Boolean(document.querySelector('#templates-panel')?.contains(document.activeElement)),
+      active: document.activeElement ? `${document.activeElement.tagName}#${document.activeElement.id}.${document.activeElement.className}` : null,
+      panelInert: Boolean(document.querySelector('#templates-panel')?.inert),
+      close: (() => {
+        const close = document.querySelector('#templates-panel [data-close-compact-drawer]');
+        if (!close) return null;
+        const rect = close.getBoundingClientRect();
+        return { display: getComputedStyle(close).display, rect: [rect.x, rect.y, rect.width, rect.height], disabled: close.disabled };
+      })(),
+    }));
+    const workspaceTemplates = await page.locator('.workspace').boundingBox();
+    assert(templatesOpen.drawer === 'templates' && templatesOpen.visible && templatesOpen.inspectorHidden, 'Templates drawer did not open exclusively.');
+    assert(templatesOpen.role === 'dialog' && templatesOpen.modal === 'true' && templatesOpen.focusedInside, `Templates drawer accessibility state is incomplete: ${JSON.stringify(templatesOpen)}`);
+    assert(JSON.stringify(workspaceTemplates) === JSON.stringify(workspaceBefore), 'Templates drawer changed the workspace rectangle.');
+    await page.screenshot({ path: join(evidence, `viewport-${browserName}-${viewportName}-templates-drawer.png`) });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(40);
+    assert(await page.evaluate(() => document.querySelector('.app-shell')?.dataset.compactDrawer === 'none'), 'Escape did not close the compact drawer.');
+    assert(await page.evaluate(() => document.activeElement === document.querySelector('#toggle-templates-panel')), 'Compact drawer did not restore focus.');
+
+    await page.locator('#toggle-inspector-panel').click();
+    await page.waitForTimeout(220);
+    const workspaceInspector = await page.locator('.workspace').boundingBox();
+    assert(JSON.stringify(workspaceInspector) === JSON.stringify(workspaceBefore), 'Inspector drawer changed the workspace rectangle.');
+    await page.locator('#compact-drawer-backdrop').click({ position: { x: 4, y: 4 } });
+    await page.waitForTimeout(40);
+    assert(await page.evaluate(() => document.querySelector('.app-shell')?.dataset.compactDrawer === 'none'), 'Backdrop did not close the compact drawer.');
+    drawerResult = { overlay: true, exclusive: true, escapeClose: true, backdropClose: true, focusRestore: true };
+  }
+  if (!immersiveShell && !compactShell) {
+    await page.locator('#toggle-templates-panel').click();
+    await page.waitForTimeout(80);
+    const widePanel = await page.evaluate(() => {
+      const panel = document.querySelector('#templates-panel')?.getBoundingClientRect();
+      const activeCard = document.querySelector('.template-card.is-active')?.getBoundingClientRect();
+      const activeBadge = document.querySelector('.template-card.is-active em')?.getBoundingClientRect();
+      const buttons = [...document.querySelectorAll('.panel-footer .panel-history-button')].map((button) => button.getBoundingClientRect());
+      return {
+        visible: document.querySelector('#templates-panel')?.getAttribute('aria-hidden') === 'false',
+        badgeInside: Boolean(activeCard && activeBadge && activeBadge.left >= activeCard.left && activeBadge.right <= activeCard.right && activeBadge.top >= activeCard.top && activeBadge.bottom <= activeCard.bottom),
+        footerAligned: buttons.length === 2 && Math.abs(buttons[0].top - buttons[1].top) < 1 && buttons.every((button) => button.height >= 44),
+        footerInside: Boolean(panel && buttons.every((button) => button.bottom <= panel.bottom + 1)),
+      };
+    });
+    assert(widePanel.visible && widePanel.badgeInside && widePanel.footerAligned && widePanel.footerInside, `Wide Template Library layout is invalid: ${JSON.stringify(widePanel)}`);
+    await page.locator('#toggle-templates-panel').click();
+    await page.waitForTimeout(40);
+  }
+
+  const controlTrigger = immersiveShell ? '#floating-control-button' : '#open-control-center-button';
   await page.locator(controlTrigger).click();
   await page.waitForTimeout(80);
   const dialogOpen = await page.evaluate(() => {
@@ -198,12 +311,81 @@ async function run() {
       scrollable: body.scrollHeight >= body.clientHeight,
       scrollSamples,
       ariaValueText: document.querySelector('#timescale-input')?.getAttribute('aria-valuetext'),
+      mobileLocaleVisible: (() => {
+        const locale = document.querySelector('#mobile-locale-select');
+        return Boolean(locale && getComputedStyle(locale).display !== 'none' && locale.getClientRects().length > 0);
+      })(),
+      customPresetGap: (() => {
+        const fields = document.querySelector('.preset-form-grid')?.getBoundingClientRect();
+        const save = document.querySelector('#save-preset-button')?.getBoundingClientRect();
+        return fields && save ? save.top - fields.bottom : 0;
+      })(),
+      eventCatalogueScrolls: (() => {
+        const catalogue = document.querySelector('.time-events-card .event-catalogue');
+        return catalogue ? catalogue.scrollHeight > catalogue.clientHeight + 1 : false;
+      })(),
+      surfaceRect: (() => {
+        const rect = document.querySelector('.control-center-surface')?.getBoundingClientRect();
+        return rect ? { top: rect.top, bottom: rect.bottom, height: rect.height } : null;
+      })(),
     };
   });
   assert(dialogOpen?.open, 'Control Center did not open as a native dialog.');
   assert(dialogOpen.focusedInside, 'Initial Control Center focus is outside the dialog.');
   assert(Boolean(dialogOpen.ariaValueText), 'Time scale is missing aria-valuetext.');
+  assert(dialogOpen.mobileLocaleVisible === immersiveShell, 'Control Center language selector visibility is incorrect.');
+  assert(dialogOpen.customPresetGap >= 11, `Custom preset action gap is ${dialogOpen.customPresetGap}px.`);
+  assert(!dialogOpen.eventCatalogueScrolls, 'Time event catalogue created a nested scroll container.');
+  if (immersiveShell && size.width <= 620) {
+    assert(dialogOpen.surfaceRect?.height >= size.height - 1, `Mobile Control Center is not full height: ${JSON.stringify(dialogOpen.surfaceRect)}.`);
+  } else if (immersiveShell) {
+    assert(dialogOpen.surfaceRect?.height >= Math.min(size.height * 0.9, 880), `Tablet Control Center is too short: ${JSON.stringify(dialogOpen.surfaceRect)}.`);
+  }
   await page.screenshot({ path: join(evidence, `viewport-${browserName}-${viewportName}-controls-open.png`) });
+  await page.locator('[data-experience-mode="learn"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-control-panel="learn"]')?.classList.contains('is-active'));
+  await page.waitForTimeout(40);
+  const guideLayout = await page.evaluate((isImmersive) => {
+    const panel = document.querySelector('[data-control-panel="learn"]')?.getBoundingClientRect();
+    const intro = document.querySelector('.learning-intro-card')?.getBoundingClientRect();
+    const moon = document.querySelector('#moon-phase-root')?.getBoundingClientRect();
+    const picker = document.querySelector('.learning-module-picker')?.getBoundingClientRect();
+    const stage = document.querySelector('.learning-stage-card')?.getBoundingClientRect();
+    const summary = document.querySelector('.learning-stage-summary');
+    const lessonTitle = document.querySelector('.lesson-step strong');
+    const moduleButtons = [...document.querySelectorAll('.learning-module-picker button')].map((button) => button.getBoundingClientRect());
+    const actionButtons = [...document.querySelectorAll('.lesson-actions button')].map((button) => button.getBoundingClientRect());
+    const pickerElement = document.querySelector('.learning-module-picker');
+    return {
+      stageFullWidth: Boolean(panel && stage && stage.width >= panel.width - 1),
+      introFullWidth: Boolean(panel && intro && intro.width >= panel.width - 1),
+      desktopOverviewAligned: Boolean(moon && picker && Math.abs(moon.top - picker.top) <= 1),
+      immersiveSequence: Boolean(moon && picker && stage && moon.bottom <= picker.top + 1 && picker.bottom <= stage.top + 1),
+      stageAfterOverview: Boolean(moon && picker && stage && stage.top >= Math.max(moon.bottom, picker.bottom) + 10),
+      headingSize: Number.parseFloat(getComputedStyle(document.querySelector('.learning-stage-header h3')).fontSize),
+      summarySize: summary ? Number.parseFloat(getComputedStyle(summary).fontSize) : 0,
+      lessonTitleSize: lessonTitle ? Number.parseFloat(getComputedStyle(lessonTitle).fontSize) : 0,
+      moduleTargets: moduleButtons.every((rect) => rect.height >= 44 && rect.width >= 44),
+      actionTargets: actionButtons.every((rect) => rect.height >= 44 && rect.width >= 44),
+      pickerHorizontalOnly: pickerElement ? pickerElement.scrollHeight <= pickerElement.clientHeight + 2 : false,
+      noDocumentOverflow: document.documentElement.scrollWidth <= innerWidth + 1,
+      isImmersive,
+    };
+  }, immersiveShell);
+  assert(guideLayout.stageFullWidth && guideLayout.introFullWidth, `Guide full-width reading flow is invalid: ${JSON.stringify(guideLayout)}`);
+  assert(guideLayout.stageAfterOverview, `Guide stage does not follow its overview row: ${JSON.stringify(guideLayout)}`);
+  assert(immersiveShell ? guideLayout.immersiveSequence : guideLayout.desktopOverviewAligned, `Guide responsive order is invalid: ${JSON.stringify(guideLayout)}`);
+  assert(guideLayout.headingSize >= 18 && guideLayout.summarySize >= 13 && guideLayout.lessonTitleSize >= 14, `Guide type hierarchy is too small: ${JSON.stringify(guideLayout)}`);
+  assert(guideLayout.moduleTargets && guideLayout.actionTargets && guideLayout.pickerHorizontalOnly && guideLayout.noDocumentOverflow, `Guide touch/overflow contract failed: ${JSON.stringify(guideLayout)}`);
+  await page.screenshot({ path: join(evidence, `viewport-${browserName}-${viewportName}-guide-top.png`) });
+  if (immersiveShell) {
+    const controlBody = page.locator('.control-center-body');
+    await controlBody.evaluate((body) => { body.scrollTop = (body.scrollHeight - body.clientHeight) * 0.5; });
+    await page.screenshot({ path: join(evidence, `viewport-${browserName}-${viewportName}-guide-middle.png`) });
+    await controlBody.evaluate((body) => { body.scrollTop = body.scrollHeight; });
+    await page.screenshot({ path: join(evidence, `viewport-${browserName}-${viewportName}-guide-bottom.png`) });
+    await controlBody.evaluate((body) => { body.scrollTop = 0; });
+  }
   await page.keyboard.press('Escape');
   await page.waitForTimeout(40);
   const escaped = await page.evaluate((selector) => ({
@@ -214,11 +396,19 @@ async function run() {
   }), controlTrigger);
   assert(!escaped.open, 'Escape did not close the Control Center.');
   assert(escaped.focusRestored, 'Control Center did not restore focus to its trigger.');
+  if (size.width > 620) {
+    await page.locator(controlTrigger).click();
+    await page.waitForTimeout(40);
+    await page.locator('#control-center').click({ position: { x: 4, y: 4 } });
+    await page.waitForTimeout(40);
+    assert(!(await page.locator('#control-center').evaluate((dialog) => dialog.open)), 'Backdrop click did not close the Control Center.');
+  }
   await page.locator(controlTrigger).click();
   await page.waitForTimeout(40);
-  await page.locator('#control-center').click({ position: { x: 4, y: 4 } });
+  await page.locator('.control-center-close').click();
   await page.waitForTimeout(40);
-  assert(!(await page.locator('#control-center').evaluate((dialog) => dialog.open)), 'Backdrop click did not close the Control Center.');
+  assert(!(await page.locator('#control-center').evaluate((dialog) => dialog.open)), 'Visible close button did not close the Control Center.');
+  assert(await page.evaluate((selector) => document.activeElement === document.querySelector(selector), controlTrigger), 'Visible close button did not restore focus.');
 
   let performanceResult;
   if (!forceCanvas && viewportName === 'desktop') {
@@ -232,6 +422,12 @@ async function run() {
     await page.locator('[data-view-control="reframe"]').click();
     const reframed = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
     assert(Number(reframed?.cameraDistance) > 0, 'WebGL Frame Overview produced an invalid camera distance.');
+    await page.evaluate(() => window.__SCIENCE_QA__?.trackObject('jupiter'));
+    await page.waitForTimeout(120);
+    const tracked = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(tracked?.viewMode === 'track', 'WebGL Track did not enter contextual tracking mode.');
+    assert(!tracked?.focusDecorationsHidden, 'WebGL Track hid environmental context.');
+    assert((tracked?.asteroidSpriteCount ?? 0) > 0, 'WebGL Track hid the asteroid belt.');
     await page.evaluate(() => window.__SCIENCE_QA__?.focusObject('jupiter'));
     await page.waitForTimeout(120);
     const focused = await page.evaluate(() => ({
@@ -241,7 +437,7 @@ async function run() {
         .map((element) => element.textContent),
     }));
     const focusedJupiter = focused.diagnostics?.objects?.find((object) => object.id === 'jupiter');
-    assert(focused.diagnostics?.viewMode === 'focus', 'WebGL focus did not enter focus view mode.');
+    assert(focused.diagnostics?.viewMode === 'inspect', 'WebGL focus compatibility alias did not enter Inspect mode.');
     assert(focused.diagnostics?.focusedObject === 'jupiter', 'WebGL focus diagnostics report the wrong object.');
     assert(focused.diagnostics?.focusDecorationsHidden, 'WebGL focus left overview decorations visible.');
     assert(
@@ -262,9 +458,14 @@ async function run() {
     await page.locator('[data-view-control="reframe"]').click();
     const reframed = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
     assert(Math.abs(Number(reframed?.cameraDistance) - 1) < 0.001, 'Canvas Frame Overview did not restore overview zoom.');
+    await page.evaluate(() => window.__SCIENCE_QA__?.trackObject('jupiter'));
+    const tracked = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(tracked?.viewMode === 'track', 'Canvas Track did not enter contextual tracking mode.');
+    assert(!tracked?.focusDecorationsHidden, 'Canvas Track hid environmental context.');
+    assert((tracked?.asteroidSpriteCount ?? 0) > 0, 'Canvas Track hid the asteroid belt.');
     await page.evaluate(() => window.__SCIENCE_QA__?.focusObject('jupiter'));
     const focused = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
-    assert(focused?.viewMode === 'focus', 'Canvas focus did not enter focus view mode.');
+    assert(focused?.viewMode === 'inspect', 'Canvas focus compatibility alias did not enter Inspect mode.');
     assert(focused?.focusedObject === 'jupiter', 'Canvas focus diagnostics report the wrong object.');
     assert(focused?.focusDecorationsHidden, 'Canvas focus left overview decorations visible.');
     await page.locator('[data-view-control="reframe"]').click();
@@ -321,6 +522,7 @@ async function run() {
     escapeClose: true,
     backdropClose: true,
     focusRestore: true,
+    drawer: drawerResult,
     performance: performanceResult,
     externalRequests: 0,
     consoleErrors,

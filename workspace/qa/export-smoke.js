@@ -54,6 +54,14 @@ const snapshot = {
 };
 
 const html = bundle.createStandaloneHtml(snapshot, {});
+const chineseHtml = bundle.createStandaloneHtml(snapshot, {}, 'zh-CN');
+if (!/^<!doctype html>\s*<html lang="zh-CN">/.test(chineseHtml)
+  || !chineseHtml.includes('太阳系探索器')
+  || !chineseHtml.includes('"locale":"zh-CN"')) {
+  throw new Error('Chinese standalone locale, shell copy, or configuration is missing.');
+}
+const chineseHtmlPath = join(root, 'qa', 'standalone-v0.7.0-smoke-zh-CN.html');
+writeFileSync(chineseHtmlPath, chineseHtml, 'utf8');
 const htmlPath = join(root, 'qa', 'standalone-v0.7.0-smoke.html');
 writeFileSync(htmlPath, html, 'utf8');
 
@@ -136,7 +144,7 @@ const assertions = [
   ['visual scale modes', html.includes('standalone-scale') && html.includes('Learning Scale') && html.includes('Real Distance') && html.includes('Real Scale')],
   ['astronomical event jump', html.includes('standalone-event') && html.includes('Jump to event')],
   ['ground observer controls', html.includes('standalone-observer') && html.includes('Altitude') && html.includes('Azimuth')],
-  ['object science summary', html.includes('standalone-science-summary') && html.includes('current Sun distance')],
+  ['object science summary', html.includes('standalone-science-summary') && html.includes('Sun distance now')],
   ['sources and accuracy', html.includes('Sources & Accuracy') && html.includes('Educational Accuracy')],
   ['time preset controls', html.includes('1 min/s') && html.includes('1 year/s')],
   ['exact date control', html.includes('standalone-date-apply') && html.includes('datetime-local')],
@@ -188,6 +196,7 @@ const accuracySource = readFileSync(join(root, 'src/astronomy/scientific-accurac
 const trajectorySource = readFileSync(join(root, 'src/travel/trajectory-engine.ts'), 'utf8');
 const missionStateSource = readFileSync(join(root, 'src/travel/mission-state-machine.ts'), 'utf8');
 const spacecraftVisualSource = readFileSync(join(root, 'src/travel/spacecraft-mission-visual.ts'), 'utf8');
+const asteroidPolicySource = readFileSync(join(root, 'src/templates/solar-system/asteroid-render-policy.ts'), 'utf8');
 
 const missingTextureDeclarations = textureFiles.filter(
   (name) => !textureCatalogSource.includes(name) || !serviceWorkerSource.includes(name),
@@ -212,7 +221,7 @@ const architectureAssertions = [
   ['shared deterministic clock step', clockSource.includes('stepSimulationClock') && clockSource.includes('MAX_SIMULATION_STEP_SECONDS')],
   ['signed Worker deterministic step', workerSource.includes("type: 'step'") && workerSource.includes('stepSimulationClock')],
   ['runtime Worker step bridge', runtimeSource.includes('pendingSimulationSteps') && runtimeSource.includes('stepSimulation(realSeconds')],
-  ['asteroid quality tiers', runtimeSource.includes("quality === 'low' ? 220") && runtimeSource.includes("quality === 'high' ? 1700")],
+  ['asteroid quality tiers', runtimeSource.includes('asteroidRenderPolicy') && asteroidPolicySource.includes('spriteCount: 1_400') && asteroidPolicySource.includes('instanceCount: 300')],
   ['Canvas deterministic-step parity', fallbackSource.includes('drawAsteroidBelt') && fallbackSource.includes('stepSimulationClock') && fallbackSource.includes('stepSimulation(realSeconds')],
   ['shared orbital math retained', orbitalMathSource.includes('planetPositionAu') && orbitalMathSource.includes('moonOrbitAngle')],
   ['shared texture source injection', runtimeSource.includes('this.options.textureSource')],
@@ -234,7 +243,7 @@ const zipSource = readFileSync(join(root, 'src/export/zip-export.ts'), 'utf8');
 const zipWorkerSource = readFileSync(join(root, 'src/export/zip-export.worker.ts'), 'utf8');
 const zipAssertions = [
   ['current ZIP filename', zipSource.includes('solar-system-source-v${APP_VERSION}.zip')],
-  ['same standalone builder used by ZIP', zipSource.includes('createStandaloneHtml(snapshot, textureSources)')],
+  ['same standalone builder and locale used by ZIP', zipSource.includes('createStandaloneHtml(snapshot, textureSources, locale)')],
   ['no duplicate texture byte packaging', !zipSource.includes('loadTextureBytes()')],
   // file:// blocks WebGL uploads of separately-fetched images, so index.html must embed
   // textures inline; relative assets/ paths would silently fall back to procedural rendering.
@@ -268,6 +277,7 @@ console.log(JSON.stringify({
   zipAssertions: zipAssertions.length,
   staleSnapshotRejected,
   htmlPath,
+  chineseHtmlPath,
   runtimePath,
   travelHtmlPath,
   travelPlan: {

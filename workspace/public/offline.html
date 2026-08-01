@@ -13,9 +13,20 @@
   </head>
   <body>
     <main>
-      <h1>Offline editor unavailable</h1>
-      <p>This device has not cached the complete editor yet. Reconnect once, open the app, and allow the first load to finish. Future sessions can then run offline.</p>
-      <button type="button" onclick="location.reload()">Retry</button>
+      <h1 id="offline-title">Offline editor unavailable</h1>
+      <p id="offline-message">This device has not cached the complete editor yet. Reconnect once, open the app, and allow the first load to finish. Future sessions can then run offline.</p>
+      <button id="offline-retry" type="button" onclick="location.reload()">Retry</button>
     </main>
+    <script>
+      try {
+        if (localStorage.getItem('solar-explorer-v08-locale') === 'zh-CN') {
+          document.documentElement.lang = 'zh-CN';
+          document.title = '科学动画生成器 · 离线';
+          document.getElementById('offline-title').textContent = '离线编辑器暂不可用';
+          document.getElementById('offline-message').textContent = '此设备尚未缓存完整编辑器。请连接网络一次、打开应用并等待首次加载完成；之后即可离线运行。';
+          document.getElementById('offline-retry').textContent = '重试';
+        }
+      } catch {}
+    </script>
   </body>
 </html>

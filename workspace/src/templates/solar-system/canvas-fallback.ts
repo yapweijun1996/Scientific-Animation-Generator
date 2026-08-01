@@ -3,6 +3,7 @@ import type {
   TemplateContext,
   TemplateSnapshot,
   ValidationResult,
+  ViewMode,
   ViewportSize,
 } from '../../core/template-protocol';
 import { defaultParameters } from '../../core/template-protocol';
@@ -32,6 +33,8 @@ import {
 } from './orbital-math';
 import { missionStateMachine } from '../../travel/mission-state-machine';
 import type { MissionCameraMode, MissionFollowDistance, MissionRuntimeState, MissionSnapshot, Vector3Au } from '../../travel/types';
+import { AssistedPilotController, pilotEnvelope, type PilotInputState } from '../../travel/assisted-pilot-policy';
+import { spacecraftTargetLength } from '../../travel/spacecraft-scale-policy';
 import {
   booleanParameter,
   numericParameter,
@@ -39,6 +42,9 @@ import {
   scaleModeParameter,
   visualModeParameter,
 } from './parameter-readers';
+import { PointerGestureClassifier } from './view-interaction-policy';
+import { asteroidRenderPolicy } from './asteroid-render-policy';
+import { createI18n, type AppLocale } from '../../i18n';
 
 interface Point {
   x: number;
@@ -115,7 +121,12 @@ function normalize(point: Point): Point {
   return { x: point.x / length, y: point.y / length };
 }
 
+function clampControlAxis(value: number): number {
+  return Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0));
+}
+
 export class SolarCanvasFallback {
+  private locale: AppLocale = 'en';
   private context?: TemplateContext;
   private canvas?: HTMLCanvasElement;
   private drawing?: CanvasRenderingContext2D;
@@ -125,7 +136,7 @@ export class SolarCanvasFallback {
   private playing = true;
   private playbackRate = 1;
   private focusedObject = 'sun';
-  private viewMode: 'overview' | 'focus' | 'free' = 'overview';
+  private viewMode: ViewMode = 'overview';
   private animationFrame = 0;
   private destroyed = false;
   private lastFrame = performance.now();
@@ -137,12 +148,13 @@ export class SolarCanvasFallback {
   private backgroundLayer?: HTMLCanvasElement;
   private backgroundSignature = '';
   private stars = seededStars(420);
-  private asteroids = seededAsteroids(900);
+  private asteroids = seededAsteroids(1_700);
+  private asteroidPaths?: Path2D[];
   private positionedPlanets: PositionedPlanet[] = [];
   private positionedMoon?: PositionedMoon;
   private dragging = false;
+  private readonly pointerGesture = new PointerGestureClassifier();
   private lastPointer: Point = { x: 0, y: 0 };
-  private pointerDown: Point = { x: 0, y: 0 };
   private manualOffset: Point = { x: 0, y: 0 };
   private zoom = 1;
   private orbitCacheKey = '';
@@ -150,26 +162,45 @@ export class SolarCanvasFallback {
   private orbitPathCache = new Map<string, Path2D>();
   private mission?: MissionSnapshot;
   private missionState?: MissionRuntimeState;
+  private readonly pilot = new AssistedPilotController();
+  private pilotHud?: HTMLDivElement;
+  private readonly pressedKeys = new Set<string>();
+  private readonly touchButtons = new Set<string>();
+  private touchAxes = { forward: 0, right: 0 };
+  private spacecraftProjectedLengthPx = 0;
+  private spacecraftScaleClamped = false;
 
   mount(context: TemplateContext, stage: HTMLElement): void {
     this.context = context;
     this.viewport = context.viewport;
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'solar-canvas canvas-fallback';
-    this.canvas.setAttribute('aria-label', 'Interactive Canvas 2D solar system fallback with Earth Moon');
+    this.canvas.setAttribute('aria-label', createI18n(this.locale).text('Interactive Canvas 2D solar system fallback with Earth Moon'));
     this.drawing = this.canvas.getContext('2d') ?? undefined;
     if (!this.drawing) throw new Error('Canvas 2D is unavailable.');
     stage.prepend(this.canvas);
+    this.pilotHud = this.createPilotHud();
+    stage.append(this.pilotHud);
     this.canvas.addEventListener('pointerdown', this.handlePointerDown);
     this.canvas.addEventListener('pointermove', this.handlePointerMove);
     this.canvas.addEventListener('pointerup', this.handlePointerUp);
-    this.canvas.addEventListener('pointercancel', this.handlePointerUp);
+    this.canvas.addEventListener('pointercancel', this.handlePointerCancel);
     this.canvas.addEventListener('wheel', this.handleWheel, { passive: false });
+    window.addEventListener('keydown', this.handlePilotKeyDown);
+    window.addEventListener('keyup', this.handlePilotKeyUp);
+    window.addEventListener('blur', this.clearPilotInput);
+    document.addEventListener('visibilitychange', this.handlePilotVisibilityChange);
     this.resize(context.viewport);
     this.lastFrame = performance.now();
     this.requestRender();
     context.onStatus?.('Canvas 2D compatibility mode · Moon and asteroid belt enabled');
     context.onFocusChange?.(this.focusedObject);
+  }
+
+  setLocale(locale: AppLocale): void {
+    this.locale = locale;
+    this.canvas?.setAttribute('aria-label', createI18n(locale).text('Interactive Canvas 2D solar system fallback with Earth Moon'));
+    this.requestRender();
   }
 
   setParameters(parameters: ParameterMap): void {
@@ -191,7 +222,7 @@ export class SolarCanvasFallback {
       this.orbitPathCache.clear();
       this.manualOffset = { x: 0, y: 0 };
       if (this.viewMode === 'overview') this.zoom = 1;
-      else if (this.viewMode === 'focus') this.focusObject(this.focusedObject);
+      else if (this.viewMode === 'inspect') this.inspectObject(this.focusedObject);
     }
     if (
       previousQuality !== qualityParameter(this.parameters)
@@ -276,9 +307,16 @@ export class SolarCanvasFallback {
     averageFrameMs: number;
     effectiveQuality: 'low' | 'auto' | 'high';
     focusedObject: string;
-    viewMode: 'overview' | 'focus' | 'free';
+    viewMode: ViewMode;
     focusDecorationsHidden: boolean;
+    manualOffsetX: number;
+    manualOffsetY: number;
+    asteroidRenderMode: 'irregular-polygons';
+    asteroidPointSizeMaxPx: number;
+    asteroidSpriteCount: number;
+    asteroidInstanceCount: number;
   } {
+    const asteroidPolicy = asteroidRenderPolicy(qualityParameter(this.parameters), 'normal');
     return {
       cameraDistance: 1 / Math.max(0.00001, this.zoom),
       measuredFps: this.measuredFps,
@@ -286,13 +324,30 @@ export class SolarCanvasFallback {
       effectiveQuality: qualityParameter(this.parameters),
       focusedObject: this.focusedObject,
       viewMode: this.viewMode,
-      focusDecorationsHidden: this.viewMode === 'focus',
+      focusDecorationsHidden: this.viewMode === 'inspect',
+      manualOffsetX: this.manualOffset.x,
+      manualOffsetY: this.manualOffset.y,
+      asteroidRenderMode: 'irregular-polygons',
+      asteroidPointSizeMaxPx: asteroidPolicy.maximumPointSizePx,
+      asteroidSpriteCount: asteroidPolicy.spriteCount + asteroidPolicy.instanceCount,
+      asteroidInstanceCount: 0,
     };
   }
 
-  focusObject(id: string): void {
+  trackObject(id: string): void {
     if (!isCelestialObjectId(id)) return;
-    this.viewMode = 'focus';
+    this.viewMode = 'track';
+    this.focusedObject = id;
+    this.manualOffset = { x: 0, y: 0 };
+    this.zoom = Math.max(0.55, Math.min(2.4, this.zoom));
+    this.requestRender();
+    this.context?.onFocusChange?.(id);
+    this.context?.onStatus?.(`Tracking ${celestialObjectName(id)} with system context · Canvas 2D mode`);
+  }
+
+  inspectObject(id: string): void {
+    if (!isCelestialObjectId(id)) return;
+    this.viewMode = 'inspect';
     this.focusedObject = id;
     this.manualOffset = { x: 0, y: 0 };
     const width = Math.max(1, this.viewport.width);
@@ -313,20 +368,36 @@ export class SolarCanvasFallback {
     this.context?.onStatus?.(`Focused on ${celestialObjectName(id)} · Canvas 2D mode`);
   }
 
+  focusObject(id: string): void {
+    this.inspectObject(id);
+  }
+
   setMission(mission?: MissionSnapshot): void {
     this.mission = mission?.plan
-      ? { ...mission, realism: { ...mission.realism } }
+      ? {
+          ...mission,
+          cameraMode: mission.cameraMode === 'pilot' && (!mission.active || !mission.plan.valid) ? 'follow' : mission.cameraMode,
+          realism: { ...mission.realism },
+          pilot: mission.pilot ? { offset: [...mission.pilot.offset] } : undefined,
+        }
       : undefined;
+    this.pilot.restoreOffset(this.mission?.pilot?.offset);
     if (mission?.active) this.viewMode = 'free';
+    this.syncPilotHud();
     this.updateMissionState();
     this.requestRender();
   }
 
   setMissionCamera(mode: MissionCameraMode, followDistance: MissionFollowDistance = this.mission?.followDistance ?? 'standard'): void {
     if (!this.mission) return;
-    this.mission = { ...this.mission, cameraMode: mode, followDistance };
+    const nextMode = mode === 'pilot' && (!this.mission.active || !this.mission.plan?.valid) ? 'follow' : mode;
+    if (this.mission.cameraMode === 'pilot' && nextMode !== 'pilot') {
+      this.pilot.beginRejoin(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+    this.mission = { ...this.mission, cameraMode: nextMode, followDistance };
+    this.syncPilotHud();
     this.requestRender();
-    this.context?.onStatus?.(`${mode === 'follow' ? 'Follow' : 'Free'} spacecraft camera active · Canvas 2D mode`);
+    this.context?.onStatus?.(`${nextMode === 'follow' ? 'Follow' : nextMode === 'pilot' ? 'Assisted pilot' : 'Free'} spacecraft camera active · Canvas 2D mode`);
   }
 
   getMissionState(): MissionRuntimeState | undefined {
@@ -342,6 +413,11 @@ export class SolarCanvasFallback {
       progress: this.missionState?.progress ?? 0,
       cameraMode: this.mission?.cameraMode,
       followDistance: this.mission?.followDistance,
+      pilotActive: this.mission?.active === true && this.mission.cameraMode === 'pilot',
+      pilotOffset: this.pilot.snapshotOffset(),
+      pilotSpeed: this.pilot.snapshot().speed,
+      spacecraftProjectedLengthPx: this.spacecraftProjectedLengthPx,
+      spacecraftScaleClamped: this.spacecraftScaleClamped,
       trajectoryPointCount: this.mission?.plan?.trajectory.length ?? 0,
       renderer: 'canvas-2d' as const,
     };
@@ -358,7 +434,7 @@ export class SolarCanvasFallback {
       focusedObject: this.focusedObject,
       viewMode: this.viewMode,
       playing: this.playing,
-      mission: this.mission,
+      mission: this.mission ? { ...this.mission, pilot: { offset: this.pilot.snapshotOffset() } } : undefined,
       clock: {
         epochIso: SIMULATION_EPOCH_ISO,
         playbackRateDaysPerSecond: this.playbackRate,
@@ -375,8 +451,10 @@ export class SolarCanvasFallback {
     this.playing = snapshot.playing !== false;
     this.setMission(snapshot.mission);
     const focusedObject = snapshot.focusedObject ?? 'sun';
-    if (snapshot.viewMode === 'overview' || (!snapshot.viewMode && focusedObject === 'sun')) this.frameOverview();
-    else this.focusObject(focusedObject);
+    const restoredViewMode = snapshot.viewMode === 'focus' ? 'inspect' : snapshot.viewMode;
+    if (restoredViewMode === 'overview' || (!restoredViewMode && focusedObject === 'sun')) this.frameOverview();
+    else if (restoredViewMode === 'track') this.trackObject(focusedObject);
+    else this.inspectObject(focusedObject);
     this.lastFrame = performance.now();
     this.requestRender();
   }
@@ -403,11 +481,16 @@ export class SolarCanvasFallback {
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas?.removeEventListener('pointermove', this.handlePointerMove);
     this.canvas?.removeEventListener('pointerup', this.handlePointerUp);
-    this.canvas?.removeEventListener('pointercancel', this.handlePointerUp);
+    this.canvas?.removeEventListener('pointercancel', this.handlePointerCancel);
     this.canvas?.removeEventListener('wheel', this.handleWheel);
+    window.removeEventListener('keydown', this.handlePilotKeyDown);
+    window.removeEventListener('keyup', this.handlePilotKeyUp);
+    window.removeEventListener('blur', this.clearPilotInput);
+    document.removeEventListener('visibilitychange', this.handlePilotVisibilityChange);
     this.orbitPointCache.clear();
     this.orbitPathCache.clear();
     this.canvas?.remove();
+    this.pilotHud?.remove();
   }
 
   /**
@@ -436,11 +519,24 @@ export class SolarCanvasFallback {
       this.updateMissionState();
       this.context?.onSimulationTime?.(this.simulationDays);
     }
+    if (this.mission?.active && this.mission.cameraMode === 'pilot') {
+      this.pilot.step(deltaSeconds, {
+        forward: { x: 0, y: 0, z: -1 },
+        right: { x: 1, y: 0, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+      });
+    } else if (this.pilot.snapshot().needsAnimation) {
+      this.pilot.step(deltaSeconds, {
+        forward: { x: 0, y: 0, z: -1 },
+        right: { x: 1, y: 0, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+      });
+    }
     const drawStartedAt = performance.now();
     this.draw();
     this.recordDrawPerformance(performance.now() - drawStartedAt, now);
     this.context?.onFrameRendered?.();
-    if (this.playing) this.requestRender();
+    if (this.playing || this.pilot.snapshot().needsAnimation) this.requestRender();
   };
 
   private recordDrawPerformance(frameMs: number, now: number): void {
@@ -547,8 +643,8 @@ export class SolarCanvasFallback {
     const moonWorld = this.moonPosition(earthWorld);
     this.updateMissionState();
     let focusWorld: Point = { x: 0, y: 0 };
-    if (this.mission?.active && this.mission.cameraMode === 'follow' && this.missionState) {
-      focusWorld = this.mapMissionAu(this.missionState.positionAu);
+    if (this.mission?.active && (this.mission.cameraMode === 'follow' || this.mission.cameraMode === 'pilot') && this.missionState) {
+      focusWorld = this.missionVisualPosition();
     } else if (this.focusedObject === MOON.id) focusWorld = moonWorld;
     else if (this.focusedObject !== 'sun') {
       focusWorld = this.orbitPosition(PLANETS.find((planet) => planet.id === this.focusedObject) ?? PLANETS[0]);
@@ -568,7 +664,7 @@ export class SolarCanvasFallback {
       y: height * 0.52 - focusWorld.y * scale + this.manualOffset.y,
     };
 
-    if (this.viewMode !== 'focus') {
+    if (this.viewMode !== 'inspect') {
       this.drawAsteroidBelt(context, origin, scale);
       if (booleanParameter(this.parameters, 'showOrbits', true)) this.drawOrbits(context, origin, scale, earthWorld);
       this.drawMissionTrajectory(context, origin, scale);
@@ -605,15 +701,15 @@ export class SolarCanvasFallback {
       : scaleModeParameter(this.parameters) === 'real-scale'
         ? Math.max(0.55, this.sunRadius() * scale)
         : Math.max(0.35, this.sunRadius() * scale);
-    if (this.viewMode !== 'focus' || this.focusedObject === 'sun') this.drawSun(context, origin, sunRadius);
-    const visiblePlanets = this.viewMode === 'focus'
+    if (this.viewMode !== 'inspect' || this.focusedObject === 'sun') this.drawSun(context, origin, sunRadius);
+    const visiblePlanets = this.viewMode === 'inspect'
       ? this.positionedPlanets.filter((positioned) => positioned.planet.id === this.focusedObject)
       : this.positionedPlanets;
     const drawables: Array<{ y: number; draw: () => void }> = visiblePlanets.map((positioned) => ({
       y: positioned.screen.y,
       draw: () => this.drawPlanet(context, positioned),
     }));
-    if (this.viewMode !== 'focus' || this.focusedObject === MOON.id) {
+    if (this.viewMode !== 'inspect' || this.focusedObject === MOON.id) {
       drawables.push({
         y: this.positionedMoon.screen.y,
         draw: () => this.drawMoon(context, this.positionedMoon!, origin),
@@ -656,6 +752,17 @@ export class SolarCanvasFallback {
     return this.mapAu(position.x, position.z);
   }
 
+  private missionVisualPosition(): Point {
+    if (!this.missionState) return { x: 0, y: 0 };
+    const mapped = this.mapMissionAu(this.missionState.positionAu);
+    const offset = this.pilot.snapshot().offset;
+    const envelope = pilotEnvelope(this.mission?.followDistance === 'near' ? 0.7 : this.mission?.followDistance === 'far' ? 3.1 : 1.55);
+    return {
+      x: mapped.x + offset.x * envelope,
+      y: mapped.y + (offset.z + offset.y * 0.7) * envelope,
+    };
+  }
+
   private drawMissionTrajectory(context: CanvasRenderingContext2D, origin: Point, scale: number): void {
     const plan = this.mission?.plan;
     if (!plan?.trajectory.length) return;
@@ -677,11 +784,22 @@ export class SolarCanvasFallback {
 
   private drawSpacecraft(context: CanvasRenderingContext2D, origin: Point, scale: number): void {
     if (!this.missionState || !this.mission?.plan) return;
-    const mapped = this.mapMissionAu(this.missionState.positionAu);
+    const mapped = this.missionVisualPosition();
     const x = origin.x + mapped.x * scale;
     const y = origin.y + mapped.y * scale;
     if (x < -24 || x > this.viewport.width + 24 || y < -24 || y > this.viewport.height + 24) return;
-    const radius = this.mission.cameraMode === 'follow' ? 9 : 6;
+    const nearestBodyDiameterPx = this.positionedPlanets.reduce((nearest, planet) => {
+      const distance = Math.hypot(planet.screen.x - x, planet.screen.y - y);
+      return distance < nearest.distance ? { distance, diameter: planet.radius * 2 } : nearest;
+    }, { distance: Number.POSITIVE_INFINITY, diameter: 0 }).diameter;
+    const size = spacecraftTargetLength({
+      cameraMode: this.mission.cameraMode,
+      followDistance: this.mission.followDistance,
+      nearestBodyDiameterPx,
+    });
+    const radius = size.targetLengthPx / 2;
+    this.spacecraftProjectedLengthPx = size.targetLengthPx;
+    this.spacecraftScaleClamped = size.clampedByBody;
     context.save();
     context.translate(x, y);
     const nextIndex = Math.min(this.mission.plan.trajectory.length - 1, Math.ceil((this.missionState.progress + 0.01) * (this.mission.plan.trajectory.length - 1)));
@@ -701,7 +819,7 @@ export class SolarCanvasFallback {
     context.fillStyle = '#245ea8';
     context.fillRect(-radius * 0.35, -radius * 1.05, radius * 0.25, radius * 2.1);
     context.restore();
-    this.drawLabel(context, `Probe · ${Math.round(this.missionState.progress * 100)}%`, x, y - radius - 10);
+    this.drawLabel(context, `${createI18n(this.locale).text('Probe')} · ${Math.round(this.missionState.progress * 100)}%`, x, y - radius - 10);
   }
 
   private drawStars(context: CanvasRenderingContext2D, width: number, height: number): void {
@@ -718,7 +836,23 @@ export class SolarCanvasFallback {
 
   private drawAsteroidBelt(context: CanvasRenderingContext2D, origin: Point, scale: number): void {
     const quality = qualityParameter(this.parameters);
-    const count = quality === 'low' ? 160 : quality === 'high' ? 900 : 420;
+    const policy = asteroidRenderPolicy(quality, 'normal');
+    const count = Math.min(this.asteroids.length, policy.spriteCount + policy.instanceCount);
+    if (!this.asteroidPaths) {
+      this.asteroidPaths = [0, 1, 2, 3].map((variant) => {
+        const path = new Path2D();
+        for (let point = 0; point < 7; point += 1) {
+          const angle = (point / 7) * TAU;
+          const radius = 0.72 + (((point * 17 + variant * 23) % 29) / 100);
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (point === 0) path.moveTo(x, y);
+          else path.lineTo(x, y);
+        }
+        path.closePath();
+        return path;
+      });
+    }
     context.save();
     for (let index = 0; index < count; index += 1) {
       const asteroid = this.asteroids[index];
@@ -729,9 +863,19 @@ export class SolarCanvasFallback {
       if (x < -4 || x > this.viewport.width + 4 || y < -4 || y > this.viewport.height + 4) continue;
       context.globalAlpha = asteroid.alpha * (quality === 'low' ? 0.7 : 1);
       context.fillStyle = index % 3 === 0 ? '#b7a384' : '#827565';
-      context.beginPath();
-      context.arc(x, y, Math.max(0.45, asteroid.size * Math.min(1.35, scale * 0.11)), 0, TAU);
-      context.fill();
+      const radius = Math.min(policy.maximumPointSizePx, Math.max(0.45, asteroid.size * Math.min(1.35, scale * 0.11)));
+      if (radius <= 1) {
+        context.beginPath();
+        context.arc(x, y, radius, 0, TAU);
+        context.fill();
+      } else {
+        context.save();
+        context.translate(x, y);
+        context.rotate(asteroid.angle * 0.37);
+        context.scale(radius, radius * (0.72 + (index % 4) * 0.08));
+        context.fill(this.asteroidPaths[index % this.asteroidPaths.length]);
+        context.restore();
+      }
     }
     context.restore();
   }
@@ -814,7 +958,7 @@ export class SolarCanvasFallback {
     context.beginPath();
     context.arc(center.x, center.y, radius, 0, TAU);
     context.fill();
-    if (this.shouldDrawLabel('sun')) this.drawLabel(context, 'Sun', center.x, center.y - radius - 8);
+    if (this.shouldDrawLabel('sun')) this.drawLabel(context, createI18n(this.locale).objectName('sun'), center.x, center.y - radius - 8);
   }
 
   private drawPlanet(context: CanvasRenderingContext2D, positioned: PositionedPlanet): void {
@@ -858,7 +1002,7 @@ export class SolarCanvasFallback {
     if (planet.id === 'saturn') this.drawSaturnRings(context, screen, radius, false);
     if (['venus', 'earth', 'mars', 'uranus', 'neptune'].includes(planet.id)) this.drawAtmosphere(context, screen, radius, planet.id);
     if (scaleModeParameter(this.parameters) !== 'learning' && radius < 2) this.drawLocator(context, screen, radius);
-    if (this.shouldDrawLabel(planet.id)) this.drawLabel(context, planet.name, screen.x, screen.y - Math.max(radius, 4) - 7);
+    if (this.shouldDrawLabel(planet.id)) this.drawLabel(context, createI18n(this.locale).objectName(planet.id), screen.x, screen.y - Math.max(radius, 4) - 7);
   }
 
   private drawMoon(context: CanvasRenderingContext2D, moon: PositionedMoon, sunScreen: Point): void {
@@ -911,7 +1055,7 @@ export class SolarCanvasFallback {
     context.arc(screen.x, screen.y, radius, 0, TAU);
     context.stroke();
     if (scaleModeParameter(this.parameters) !== 'learning' && radius < 2) this.drawLocator(context, screen, radius);
-    if (this.shouldDrawLabel(MOON.id)) this.drawLabel(context, MOON.name, screen.x, screen.y - Math.max(radius, 4) - 7);
+    if (this.shouldDrawLabel(MOON.id)) this.drawLabel(context, createI18n(this.locale).objectName(MOON.id), screen.x, screen.y - Math.max(radius, 4) - 7);
   }
 
   private drawLocator(context: CanvasRenderingContext2D, center: Point, radius: number): void {
@@ -1120,21 +1264,162 @@ export class SolarCanvasFallback {
 
   private shouldDrawLabel(id: string): boolean {
     if (!booleanParameter(this.parameters, 'showLabels', true)) return false;
-    if (this.viewMode === 'focus') return id === this.focusedObject;
+    if (this.viewMode === 'inspect') return id === this.focusedObject;
     if (this.viewport.width >= 1_000) return true;
     return ['sun', 'earth', 'jupiter', 'saturn', 'uranus', 'neptune'].includes(id);
   }
 
+  private createPilotHud(): HTMLDivElement {
+    const hud = document.createElement('div');
+    hud.className = 'assisted-pilot-hud';
+    hud.hidden = true;
+    hud.setAttribute('role', 'group');
+    hud.setAttribute('aria-label', 'Assisted pilot controls');
+    const status = document.createElement('div');
+    status.className = 'pilot-status';
+    status.innerHTML = '<strong>Assisted pilot</strong><small>Visual training offset · scientific route unchanged</small>';
+    const joystick = document.createElement('div');
+    joystick.className = 'pilot-joystick';
+    const knob = document.createElement('i');
+    joystick.append(knob);
+    let pointerId: number | undefined;
+    const move = (event: PointerEvent): void => {
+      const bounds = joystick.getBoundingClientRect();
+      const radius = Math.max(1, Math.min(bounds.width, bounds.height) * 0.34);
+      let x = (event.clientX - bounds.left - bounds.width / 2) / radius;
+      let y = (event.clientY - bounds.top - bounds.height / 2) / radius;
+      const magnitude = Math.hypot(x, y);
+      if (magnitude > 1) { x /= magnitude; y /= magnitude; }
+      this.touchAxes = { right: x, forward: -y };
+      knob.style.transform = `translate(${x * radius}px,${y * radius}px)`;
+      this.syncPilotInput();
+    };
+    const release = (event: PointerEvent): void => {
+      if (pointerId !== event.pointerId) return;
+      pointerId = undefined;
+      this.touchAxes = { forward: 0, right: 0 };
+      knob.style.transform = 'translate(0,0)';
+      this.syncPilotInput();
+    };
+    joystick.addEventListener('pointerdown', (event) => { pointerId = event.pointerId; joystick.setPointerCapture(event.pointerId); move(event); });
+    joystick.addEventListener('pointermove', (event) => { if (pointerId === event.pointerId) move(event); });
+    joystick.addEventListener('pointerup', release);
+    joystick.addEventListener('pointercancel', release);
+
+    const actions = document.createElement('div');
+    actions.className = 'pilot-actions';
+    for (const [label, action] of [['Up', 'up'], ['Down', 'down'], ['Boost', 'boost'], ['Brake', 'brake']] as const) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      const stop = (event: PointerEvent): void => {
+        this.touchButtons.delete(action);
+        button.classList.remove('is-active');
+        if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+        this.syncPilotInput();
+      };
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        this.touchButtons.add(action);
+        button.classList.add('is-active');
+        this.syncPilotInput();
+      });
+      button.addEventListener('pointerup', stop);
+      button.addEventListener('pointercancel', stop);
+      actions.append(button);
+    }
+    const rejoin = document.createElement('button');
+    rejoin.type = 'button';
+    rejoin.className = 'pilot-rejoin';
+    rejoin.textContent = 'Rejoin route';
+    rejoin.addEventListener('click', () => {
+      this.pilot.beginRejoin(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      this.requestRender();
+    });
+    actions.append(rejoin);
+    const hint = document.createElement('small');
+    hint.className = 'pilot-keyboard-hint';
+    hint.textContent = 'W/S forward · A/D strafe · Q/E vertical · Shift boost · Space brake';
+    hud.append(status, joystick, actions, hint);
+    return hud;
+  }
+
+  private pilotIsInteractive(): boolean {
+    return this.mission?.active === true && this.mission.cameraMode === 'pilot' && this.mission.plan?.valid === true;
+  }
+
+  private syncPilotHud(): void {
+    if (!this.pilotHud) return;
+    this.pilotHud.hidden = !this.pilotIsInteractive();
+    if (!this.pilotIsInteractive()) this.clearPilotInput();
+  }
+
+  private handlePilotKeyDown = (event: KeyboardEvent): void => {
+    if (!this.pilotIsInteractive() || event.repeat) return;
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+    if (!['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight', 'Space'].includes(event.code)) return;
+    event.preventDefault();
+    this.pressedKeys.add(event.code);
+    this.syncPilotInput();
+  };
+
+  private handlePilotKeyUp = (event: KeyboardEvent): void => {
+    if (!this.pressedKeys.delete(event.code)) return;
+    this.syncPilotInput();
+  };
+
+  private handlePilotVisibilityChange = (): void => {
+    if (document.visibilityState !== 'visible') this.clearPilotInput();
+  };
+
+  private clearPilotInput = (): void => {
+    this.pressedKeys.clear();
+    this.touchButtons.clear();
+    this.touchAxes = { forward: 0, right: 0 };
+    this.pilot.clearInput();
+    this.pilotHud?.querySelectorAll('.is-active').forEach((element) => element.classList.remove('is-active'));
+    const knob = this.pilotHud?.querySelector<HTMLElement>('.pilot-joystick i');
+    if (knob) knob.style.transform = 'translate(0,0)';
+  };
+
+  private syncPilotInput(): void {
+    if (!this.pilotIsInteractive()) { this.pilot.clearInput(); return; }
+    const axis = (positive: string, negative: string): number => Number(this.pressedKeys.has(positive)) - Number(this.pressedKeys.has(negative));
+    const input: Partial<PilotInputState> = {
+      forward: clampControlAxis(axis('KeyW', 'KeyS') + this.touchAxes.forward),
+      right: clampControlAxis(axis('KeyD', 'KeyA') + this.touchAxes.right),
+      up: clampControlAxis(axis('KeyE', 'KeyQ') + Number(this.touchButtons.has('up')) - Number(this.touchButtons.has('down'))),
+      boost: this.pressedKeys.has('ShiftLeft') || this.pressedKeys.has('ShiftRight') || this.touchButtons.has('boost'),
+      brake: this.pressedKeys.has('Space') || this.touchButtons.has('brake'),
+    };
+    this.pilot.setInput(input);
+    this.requestRender();
+  }
+
   private handlePointerDown = (event: PointerEvent): void => {
     if (!this.canvas) return;
+    const accepted = this.pointerGesture.begin({
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      isPrimary: event.isPrimary,
+      button: event.button,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    if (!accepted) {
+      this.dragging = false;
+      return;
+    }
     if (this.viewMode === 'overview') this.viewMode = 'free';
     this.dragging = true;
     this.lastPointer = { x: event.clientX, y: event.clientY };
-    this.pointerDown = { ...this.lastPointer };
     this.canvas.setPointerCapture(event.pointerId);
   };
 
   private handlePointerMove = (event: PointerEvent): void => {
+    this.pointerGesture.move(event.pointerId, event.clientX, event.clientY);
     if (!this.dragging) return;
     this.manualOffset.x += event.clientX - this.lastPointer.x;
     this.manualOffset.y += event.clientY - this.lastPointer.y;
@@ -1144,21 +1429,32 @@ export class SolarCanvasFallback {
 
   private handlePointerUp = (event: PointerEvent): void => {
     if (!this.canvas) return;
-    const wasDragging = Math.hypot(event.clientX - this.pointerDown.x, event.clientY - this.pointerDown.y) > 4;
+    const wasClick = this.pointerGesture.finish({
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    });
     this.dragging = false;
-    if (wasDragging) return;
+    if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
+    if (!wasClick) return;
     const bounds = this.canvas.getBoundingClientRect();
     const point = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
     const moon = this.positionedMoon;
     if (moon && Math.hypot(point.x - moon.screen.x, point.y - moon.screen.y) <= moon.radius * 1.8) {
-      this.focusObject(MOON.id);
+      this.trackObject(MOON.id);
       return;
     }
     const hit = this.positionedPlanets
       .slice()
       .reverse()
       .find((positioned) => Math.hypot(point.x - positioned.screen.x, point.y - positioned.screen.y) <= positioned.radius * 1.5);
-    if (hit) this.focusObject(hit.planet.id);
+    if (hit) this.trackObject(hit.planet.id);
+  };
+
+  private handlePointerCancel = (event: PointerEvent): void => {
+    this.pointerGesture.cancel(event.pointerId);
+    this.dragging = false;
+    if (this.canvas?.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
   };
 
   private handleWheel = (event: WheelEvent): void => {

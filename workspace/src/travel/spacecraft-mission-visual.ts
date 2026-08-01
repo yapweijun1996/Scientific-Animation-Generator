@@ -8,6 +8,9 @@ import type {
   MissionSnapshot,
   Vector3Au,
 } from './types';
+import { AssistedPilotController, pilotEnvelope, type PilotInputState } from './assisted-pilot-policy';
+import { smoothSpacecraftScale, spacecraftTargetLength } from './spacecraft-scale-policy';
+import { createI18n, type AppLocale } from '../i18n';
 
 export interface SpacecraftMissionVisualOptions {
   scene: THREE.Scene;
@@ -15,6 +18,9 @@ export interface SpacecraftMissionVisualOptions {
   controls: OrbitControls;
   labelLayer: HTMLElement;
   mapAu(position: Vector3Au): THREE.Vector3;
+  nearestBodyDiameterPx(position: THREE.Vector3): number;
+  viewportHeight(): number;
+  requestRender(): void;
   onStatus?(message: string): void;
 }
 
@@ -23,6 +29,10 @@ const FOLLOW_DISTANCE: Record<MissionFollowDistance, number> = {
   standard: 1.55,
   far: 3.1,
 };
+
+function clampAxisValue(value: number): number {
+  return Math.max(-1, Math.min(1, Number.isFinite(value) ? value : 0));
+}
 
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
@@ -92,17 +102,28 @@ function createSpacecraft(): THREE.Group {
   dish.position.y = 0.42;
   root.add(dish);
 
-  root.scale.setScalar(0.22);
   return root;
 }
 
 export class SpacecraftMissionVisual {
+  private locale: AppLocale = 'en';
   private mission?: MissionSnapshot;
   private state?: MissionRuntimeState;
   private readonly spacecraft = createSpacecraft();
   private trajectory?: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly label: HTMLSpanElement;
+  private readonly pilotHud: HTMLDivElement;
+  private readonly pilot = new AssistedPilotController();
+  private readonly pressedKeys = new Set<string>();
+  private readonly touchButtons = new Set<string>();
+  private touchAxes = { forward: 0, right: 0 };
+  private nominalWorldPosition?: THREE.Vector3;
   private lastWorldPosition?: THREE.Vector3;
+  private modelLength = 1;
+  private currentScale = 0;
+  private projectedLengthPx = 0;
+  private scaleClamped = false;
+  private lastFrameAt = performance.now();
   // Scratch/cached state so the per-frame label pass allocates nothing and never
   // reads layout. Style writes are skipped unless the value actually changed.
   private readonly scratchVector = new THREE.Vector3();
@@ -123,32 +144,77 @@ export class SpacecraftMissionVisual {
     this.label.textContent = 'Probe';
     this.label.hidden = true;
     options.labelLayer.append(this.label);
+    this.pilotHud = this.createPilotHud();
+    options.labelLayer.append(this.pilotHud);
+    const bounds = new THREE.Box3().setFromObject(this.spacecraft).getSize(new THREE.Vector3());
+    this.modelLength = Math.max(bounds.x, bounds.y, bounds.z, 1e-5);
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
+    window.addEventListener('blur', this.clearPilotInput);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+  }
+
+  setLocale(locale: AppLocale): void {
+    this.locale = locale;
+    const i18n = createI18n(locale);
+    this.labelText = '';
+    this.pilotHud.setAttribute('aria-label', i18n.text('Assisted pilot controls'));
+    const status = this.pilotHud.querySelector<HTMLElement>('.pilot-status');
+    if (status) status.innerHTML = `<strong>${i18n.text('Assisted pilot')}</strong><small>${i18n.text('Visual training offset · scientific route unchanged')}</small>`;
+    const joystick = this.pilotHud.querySelector<HTMLElement>('.pilot-joystick');
+    joystick?.setAttribute('aria-label', i18n.text('Move spacecraft forward, backward, left, and right'));
+    this.pilotHud.querySelectorAll<HTMLButtonElement>('[data-pilot-action]').forEach((button) => {
+      const labels: Record<string, string> = { up: 'Up', down: 'Down', boost: 'Boost', brake: 'Brake' };
+      button.textContent = i18n.text(labels[button.dataset.pilotAction ?? ''] ?? button.textContent ?? '');
+    });
+    const rejoin = this.pilotHud.querySelector<HTMLElement>('.pilot-rejoin');
+    if (rejoin) rejoin.textContent = i18n.text('Rejoin route');
+    this.updateLabel();
   }
 
   setMission(mission?: MissionSnapshot): void {
+    const cameraMode = mission?.active && mission.plan?.valid
+      ? mission.cameraMode
+      : mission?.cameraMode === 'pilot' ? 'follow' : mission?.cameraMode;
     this.mission = mission?.plan
       ? {
           plan: mission.plan,
           active: Boolean(mission.active),
-          cameraMode: mission.cameraMode,
+          cameraMode: cameraMode ?? 'follow',
           followDistance: mission.followDistance,
           realism: { ...mission.realism },
+          pilot: mission.pilot ? { offset: [...mission.pilot.offset] } : undefined,
         }
       : undefined;
+    this.pilot.restoreOffset(this.mission?.pilot?.offset);
     this.state = undefined;
+    this.nominalWorldPosition = undefined;
     this.lastWorldPosition = undefined;
+    this.syncPilotHud();
     this.rebuildTrajectory();
     this.update(this.mission?.plan?.plannedAtSimulationDays ?? 0);
   }
 
   setCamera(mode: MissionCameraMode, followDistance: MissionFollowDistance = this.mission?.followDistance ?? 'standard'): void {
     if (!this.mission) return;
-    this.mission = { ...this.mission, cameraMode: mode, followDistance };
+    const nextMode = mode === 'pilot' && (!this.mission.active || !this.mission.plan?.valid) ? 'follow' : mode;
+    if (this.mission.cameraMode === 'pilot' && nextMode !== 'pilot') {
+      this.pilot.beginRejoin(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+    this.mission = { ...this.mission, cameraMode: nextMode, followDistance };
     this.lastWorldPosition = undefined;
-    this.options.onStatus?.(`${mode === 'follow' ? 'Follow' : 'Free'} spacecraft camera active`);
+    this.syncPilotHud();
+    this.options.requestRender();
+    this.options.onStatus?.(`${nextMode === 'follow' ? 'Follow' : nextMode === 'pilot' ? 'Assisted pilot' : 'Free'} spacecraft camera active`);
   }
 
-  update(simulationDays: number): MissionRuntimeState | undefined {
+  rejoinRoute(): void {
+    this.pilot.beginRejoin(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.options.requestRender();
+    this.options.onStatus?.('Assisted pilot · rejoining the scientific route');
+  }
+
+  update(simulationDays: number, allowCameraFollow = true): MissionRuntimeState | undefined {
     const plan = this.mission?.plan;
     if (!plan) {
       this.spacecraft.visible = false;
@@ -162,12 +228,15 @@ export class SpacecraftMissionVisual {
       : Math.min(simulationDays, plan.departureSimulationDays);
     this.state = missionStateMachine.stateAt(plan, effectiveDays);
     const world = this.options.mapAu(this.state.positionAu);
-    this.spacecraft.position.copy(world);
+    this.nominalWorldPosition = world.clone();
+    this.applyPilotPosition();
     this.spacecraft.visible = true;
     this.label.hidden = false;
-    this.orientSpacecraft(world);
-    if (this.mission?.active && this.mission.cameraMode === 'follow') this.updateFollowCamera(world);
-    this.lastWorldPosition = world.clone();
+    this.orientSpacecraft(this.spacecraft.position);
+    if (allowCameraFollow && this.mission?.active && (this.mission.cameraMode === 'follow' || this.mission.cameraMode === 'pilot')) {
+      this.updateFollowCamera(this.spacecraft.position);
+    }
+    this.lastWorldPosition = this.spacecraft.position.clone();
     return this.state;
   }
 
@@ -175,8 +244,31 @@ export class SpacecraftMissionVisual {
    * Updates the probe overlay for one frame. `animatePulse` is false while the
    * simulation is paused so the decorative pulse cannot hold the render loop open.
    */
-  updateFrame(animatePulse = true): void {
+  updateFrame(animatePulse = true, elapsedSeconds?: number, allowCameraFollow = true): void {
     if (!this.spacecraft.visible) return;
+    const now = performance.now();
+    const dt = elapsedSeconds ?? Math.max(0, Math.min(1 / 30, (now - this.lastFrameAt) / 1_000));
+    this.lastFrameAt = now;
+    if (this.mission?.active && this.mission.cameraMode === 'pilot') {
+      const forward = this.options.controls.target.clone().sub(this.options.camera.position).normalize();
+      const right = new THREE.Vector3().crossVectors(forward, this.options.camera.up).normalize();
+      const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+      const pilotState = this.pilot.step(dt, { forward, right, up });
+      this.applyPilotPosition();
+      if (pilotState.speed > 0.01) {
+        const direction = new THREE.Vector3(pilotState.velocity.x, pilotState.velocity.y, pilotState.velocity.z).normalize();
+        this.spacecraft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+      }
+      if (allowCameraFollow) this.updateFollowCamera(this.spacecraft.position);
+    } else if (this.pilot.snapshot().needsAnimation) {
+      this.pilot.step(dt, {
+        forward: { x: 0, y: 0, z: -1 },
+        right: { x: 1, y: 0, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+      });
+      this.applyPilotPosition();
+    }
+    this.updateAdaptiveScale(dt);
     this.updateLabel();
     if (!animatePulse) return;
     const pulse = 0.96 + Math.sin(performance.now() * 0.004) * 0.035;
@@ -187,9 +279,9 @@ export class SpacecraftMissionVisual {
     });
   }
 
-  rebuild(): void {
+  rebuild(allowCameraFollow = true): void {
     this.rebuildTrajectory();
-    if (this.state) this.update(this.state.simulationDays);
+    if (this.state) this.update(this.state.simulationDays, allowCameraFollow);
   }
 
   getState(): MissionRuntimeState | undefined {
@@ -204,6 +296,7 @@ export class SpacecraftMissionVisual {
       cameraMode: this.mission.cameraMode,
       followDistance: this.mission.followDistance,
       realism: { ...this.mission.realism },
+      pilot: { offset: this.pilot.snapshotOffset() },
     };
   }
 
@@ -218,6 +311,11 @@ export class SpacecraftMissionVisual {
       progress: this.state?.progress ?? 0,
       cameraMode: this.mission?.cameraMode,
       followDistance: this.mission?.followDistance,
+      pilotActive: this.mission?.active === true && this.mission.cameraMode === 'pilot',
+      pilotOffset: this.pilot.snapshotOffset(),
+      pilotSpeed: this.pilot.snapshot().speed,
+      spacecraftProjectedLengthPx: this.projectedLengthPx,
+      spacecraftScaleClamped: this.scaleClamped,
       worldX: world.x,
       worldY: world.y,
       worldZ: world.z,
@@ -234,6 +332,199 @@ export class SpacecraftMissionVisual {
     this.options.scene.remove(this.spacecraft);
     disposeObject(this.spacecraft);
     this.label.remove();
+    this.pilotHud.remove();
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    window.removeEventListener('blur', this.clearPilotInput);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+  }
+
+  needsAnimation(): boolean {
+    return this.pilot.snapshot().needsAnimation;
+  }
+
+  private createPilotHud(): HTMLDivElement {
+    const hud = document.createElement('div');
+    hud.className = 'assisted-pilot-hud';
+    hud.hidden = true;
+    hud.setAttribute('role', 'group');
+    hud.setAttribute('aria-label', 'Assisted pilot controls');
+
+    const status = document.createElement('div');
+    status.className = 'pilot-status';
+    status.innerHTML = '<strong>Assisted pilot</strong><small>Visual training offset · scientific route unchanged</small>';
+
+    const joystick = document.createElement('div');
+    joystick.className = 'pilot-joystick';
+    joystick.setAttribute('aria-label', 'Move spacecraft forward, backward, left, and right');
+    const knob = document.createElement('i');
+    joystick.append(knob);
+    let joystickPointer: number | undefined;
+    const updateJoystick = (event: PointerEvent): void => {
+      const bounds = joystick.getBoundingClientRect();
+      const radius = Math.max(1, Math.min(bounds.width, bounds.height) * 0.34);
+      let x = (event.clientX - (bounds.left + bounds.width / 2)) / radius;
+      let y = (event.clientY - (bounds.top + bounds.height / 2)) / radius;
+      const magnitude = Math.hypot(x, y);
+      if (magnitude > 1) {
+        x /= magnitude;
+        y /= magnitude;
+      }
+      this.touchAxes = { right: x, forward: -y };
+      knob.style.transform = `translate(${x * radius}px,${y * radius}px)`;
+      this.syncPilotInput();
+    };
+    const releaseJoystick = (event: PointerEvent): void => {
+      if (joystickPointer !== event.pointerId) return;
+      joystickPointer = undefined;
+      this.touchAxes = { forward: 0, right: 0 };
+      knob.style.transform = 'translate(0,0)';
+      if (joystick.hasPointerCapture(event.pointerId)) joystick.releasePointerCapture(event.pointerId);
+      this.syncPilotInput();
+    };
+    joystick.addEventListener('pointerdown', (event) => {
+      joystickPointer = event.pointerId;
+      joystick.setPointerCapture(event.pointerId);
+      updateJoystick(event);
+    });
+    joystick.addEventListener('pointermove', (event) => {
+      if (joystickPointer === event.pointerId) updateJoystick(event);
+    });
+    joystick.addEventListener('pointerup', releaseJoystick);
+    joystick.addEventListener('pointercancel', releaseJoystick);
+
+    const actions = document.createElement('div');
+    actions.className = 'pilot-actions';
+    const addHoldButton = (label: string, action: string): void => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.pilotAction = action;
+      const release = (event: PointerEvent): void => {
+        this.touchButtons.delete(action);
+        button.classList.remove('is-active');
+        if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+        this.syncPilotInput();
+      };
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        this.touchButtons.add(action);
+        button.classList.add('is-active');
+        this.syncPilotInput();
+      });
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      actions.append(button);
+    };
+    addHoldButton('Up', 'up');
+    addHoldButton('Down', 'down');
+    addHoldButton('Boost', 'boost');
+    addHoldButton('Brake', 'brake');
+    const rejoin = document.createElement('button');
+    rejoin.type = 'button';
+    rejoin.className = 'pilot-rejoin';
+    rejoin.textContent = 'Rejoin route';
+    rejoin.addEventListener('click', () => this.rejoinRoute());
+    actions.append(rejoin);
+
+    const keyboard = document.createElement('small');
+    keyboard.className = 'pilot-keyboard-hint';
+    keyboard.textContent = 'W/S forward · A/D strafe · Q/E vertical · Shift boost · Space brake';
+    hud.append(status, joystick, actions, keyboard);
+    return hud;
+  }
+
+  private syncPilotHud(): void {
+    const active = this.mission?.active === true && this.mission.cameraMode === 'pilot';
+    this.pilotHud.hidden = !active;
+    this.pilotHud.classList.toggle('is-active', active);
+    if (!active) this.clearPilotInput();
+  }
+
+  private pilotIsInteractive(): boolean {
+    return this.mission?.active === true && this.mission.cameraMode === 'pilot' && this.mission.plan?.valid === true;
+  }
+
+  private handleKeyDown = (event: KeyboardEvent): void => {
+    if (!this.pilotIsInteractive() || event.repeat) return;
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+    const handled = ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight', 'Space'];
+    if (!handled.includes(event.code)) return;
+    event.preventDefault();
+    this.pressedKeys.add(event.code);
+    this.syncPilotInput();
+  };
+
+  private handleKeyUp = (event: KeyboardEvent): void => {
+    if (!this.pressedKeys.delete(event.code)) return;
+    this.syncPilotInput();
+  };
+
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState !== 'visible') this.clearPilotInput();
+  };
+
+  private clearPilotInput = (): void => {
+    this.pressedKeys.clear();
+    this.touchButtons.clear();
+    this.touchAxes = { forward: 0, right: 0 };
+    this.pilot.clearInput();
+    this.pilotHud.querySelectorAll('.is-active').forEach((element) => element.classList.remove('is-active'));
+    const knob = this.pilotHud.querySelector<HTMLElement>('.pilot-joystick i');
+    if (knob) knob.style.transform = 'translate(0,0)';
+  };
+
+  private syncPilotInput(): void {
+    if (!this.pilotIsInteractive()) {
+      this.pilot.clearInput();
+      return;
+    }
+    const keyboardAxis = (positive: string, negative: string): number => Number(this.pressedKeys.has(positive)) - Number(this.pressedKeys.has(negative));
+    const input: Partial<PilotInputState> = {
+      forward: clampAxisValue(keyboardAxis('KeyW', 'KeyS') + this.touchAxes.forward),
+      right: clampAxisValue(keyboardAxis('KeyD', 'KeyA') + this.touchAxes.right),
+      up: clampAxisValue(keyboardAxis('KeyE', 'KeyQ') + Number(this.touchButtons.has('up')) - Number(this.touchButtons.has('down'))),
+      boost: this.pressedKeys.has('ShiftLeft') || this.pressedKeys.has('ShiftRight') || this.touchButtons.has('boost'),
+      brake: this.pressedKeys.has('Space') || this.touchButtons.has('brake'),
+    };
+    this.pilot.setInput(input);
+    this.options.requestRender();
+  }
+
+  private applyPilotPosition(): void {
+    if (!this.nominalWorldPosition) return;
+    const state = this.pilot.snapshot();
+    const envelope = pilotEnvelope(FOLLOW_DISTANCE[this.mission?.followDistance ?? 'standard']);
+    this.spacecraft.position.copy(this.nominalWorldPosition).add(new THREE.Vector3(
+      state.offset.x * envelope,
+      state.offset.y * envelope,
+      state.offset.z * envelope,
+    ));
+  }
+
+  private updateAdaptiveScale(elapsedSeconds: number): void {
+    const distance = Math.max(1e-5, this.spacecraft.position.distanceTo(this.options.camera.position));
+    const viewportHeight = Math.max(1, this.options.viewportHeight());
+    const worldPerPixel = 2 * distance * Math.tan(THREE.MathUtils.degToRad(this.options.camera.fov / 2)) / viewportHeight;
+    const decision = spacecraftTargetLength({
+      cameraMode: this.mission?.cameraMode,
+      followDistance: this.mission?.followDistance,
+      nearestBodyDiameterPx: this.options.nearestBodyDiameterPx(this.spacecraft.position),
+    });
+    const targetScale = decision.targetLengthPx * worldPerPixel / this.modelLength;
+    const smoothedScale = smoothSpacecraftScale(this.currentScale, targetScale, elapsedSeconds);
+    const hardMaximumPx = decision.clampedByBody ? decision.targetLengthPx : 64;
+    const boundedProjectedLengthPx = THREE.MathUtils.clamp(
+      smoothedScale * this.modelLength / worldPerPixel,
+      14,
+      hardMaximumPx,
+    );
+    this.currentScale = boundedProjectedLengthPx * worldPerPixel / this.modelLength;
+    this.spacecraft.scale.setScalar(this.currentScale);
+    this.projectedLengthPx = boundedProjectedLengthPx;
+    this.scaleClamped = decision.clampedByBody;
   }
 
   private rebuildTrajectory(): void {
@@ -297,9 +588,11 @@ export class SpacecraftMissionVisual {
       this.labelVisible = visible;
     }
     if (!visible) return;
+    const i18n = createI18n(this.locale);
+    const probe = i18n.text('Probe');
     const text = this.state?.completed
-      ? this.state.status === 'orbit-achieved' ? 'Probe · Orbit achieved' : 'Probe · Fly-by complete'
-      : `Probe · ${Math.round((this.state?.progress ?? 0) * 100)}%`;
+      ? this.state.status === 'orbit-achieved' ? `${probe} · ${i18n.text('Orbit achieved')}` : `${probe} · ${i18n.text('Fly-by complete')}`
+      : `${probe} · ${Math.round((this.state?.progress ?? 0) * 100)}%`;
     if (this.labelText !== text) {
       this.label.textContent = text;
       this.labelText = text;

@@ -14,6 +14,7 @@ import {
   type MissionSnapshot,
   type MissionType,
 } from '../travel/types';
+import { createI18n, missionRejectionText, type AppLocale } from '../i18n';
 
 interface SpacecraftTravelControllerOptions {
   root: HTMLElement;
@@ -76,11 +77,13 @@ function escapeHtml(value: string): string {
 }
 
 export class SpacecraftTravelController {
+  private locale: AppLocale = 'en';
   private destinationId: PlanetId = 'mars';
   private missionType: MissionType = 'orbiter';
   private realism: MissionRealismOptions = { ...DEFAULT_MISSION_REALISM };
   private cameraMode: MissionCameraMode = 'follow';
   private followDistance: MissionFollowDistance = 'standard';
+  private pilot?: MissionSnapshot['pilot'];
   private plan?: MissionPlan;
   private active = false;
   private lastSimulationDays?: number;
@@ -102,6 +105,11 @@ export class SpacecraftTravelController {
     this.dashboardUpdateTimer = undefined;
     this.options.root.removeEventListener('click', this.handleClickBound);
     this.options.root.removeEventListener('change', this.handleChangeBound);
+  }
+
+  setLocale(locale: AppLocale): void {
+    this.locale = locale;
+    this.render();
   }
 
   openForDestination(destinationId: string): void {
@@ -163,6 +171,7 @@ export class SpacecraftTravelController {
       cameraMode: this.cameraMode,
       followDistance: this.followDistance,
       realism: { ...this.realism },
+      pilot: this.pilot ? { offset: [...this.pilot.offset] as [number, number, number] } : undefined,
     };
   }
 
@@ -171,6 +180,7 @@ export class SpacecraftTravelController {
     if (!mission?.plan) {
       this.plan = undefined;
       this.active = false;
+      this.pilot = undefined;
       this.pausedEventIds.clear();
       this.options.setMission(undefined);
       this.options.root.querySelector<HTMLElement>('#travel-mode-root')?.replaceChildren();
@@ -182,6 +192,7 @@ export class SpacecraftTravelController {
     this.realism = { ...DEFAULT_MISSION_REALISM, ...mission.realism };
     this.cameraMode = mission.cameraMode;
     this.followDistance = mission.followDistance;
+    this.pilot = mission.pilot ? { offset: [...mission.pilot.offset] as [number, number, number] } : undefined;
     this.active = mission.active;
     this.pausedEventIds.clear();
     this.options.setMission(this.getSnapshot());
@@ -201,13 +212,14 @@ export class SpacecraftTravelController {
       realism: this.realism,
     });
     this.active = false;
+    this.pilot = undefined;
     this.pausedEventIds.clear();
     this.options.setMission(this.getSnapshot());
     if (notify) {
       this.options.setStatus(
         this.plan.valid
           ? `Route planned · Earth to ${this.plan.destinationName}`
-          : `Route rejected · ${this.plan.rejectionReason ?? 'No valid transfer'}`,
+          : `Route rejected · ${missionRejectionText(this.plan.rejectionCode, this.plan.rejectionReason ?? 'No valid transfer', this.locale)}`,
       );
       this.options.queueSave();
     }
@@ -215,7 +227,7 @@ export class SpacecraftTravelController {
 
   private startMission(): void {
     if (!this.plan?.valid) {
-      this.options.setStatus(this.plan?.rejectionReason ?? 'Plan a valid mission first.');
+      this.options.setStatus(this.plan ? missionRejectionText(this.plan.rejectionCode, this.plan.rejectionReason ?? 'Plan a valid mission first.', this.locale) : 'Plan a valid mission first.');
       return;
     }
     this.active = true;
@@ -231,7 +243,9 @@ export class SpacecraftTravelController {
     this.options.setPlaying(true);
     this.options.closeControlCenter();
     this.options.setStatus(
-      `Mission started · ${this.plan.destinationName} · ${formatPlaybackRate(cruiseRate)}`,
+      this.locale === 'zh-CN'
+        ? `任务已开始 · ${createI18n(this.locale).objectName(this.plan.destinationId)} · ${createI18n(this.locale).text(formatPlaybackRate(cruiseRate))}`
+        : `Mission started · ${this.plan.destinationName} · ${formatPlaybackRate(cruiseRate)}`,
     );
     this.options.queueSave();
   }
@@ -250,7 +264,6 @@ export class SpacecraftTravelController {
     this.cameraMode = mode;
     this.followDistance = distance;
     this.options.setMissionCamera(mode, distance);
-    this.options.setMission(this.getSnapshot());
     this.options.queueSave();
     this.updateDashboard();
   }
@@ -295,7 +308,7 @@ export class SpacecraftTravelController {
       this.cancelMission();
       return;
     }
-    if (button.dataset.missionCamera === 'follow' || button.dataset.missionCamera === 'free') {
+    if (button.dataset.missionCamera === 'follow' || button.dataset.missionCamera === 'pilot' || button.dataset.missionCamera === 'free') {
       this.setCamera(button.dataset.missionCamera);
       this.render();
       return;
@@ -329,6 +342,7 @@ export class SpacecraftTravelController {
   }
 
   private render(): void {
+    const i18n = createI18n(this.locale);
     const root = this.options.root.querySelector<HTMLElement>('#travel-mode-root');
     if (!root) return;
     const destinations = this.destinationCatalogue();
@@ -339,8 +353,8 @@ export class SpacecraftTravelController {
       return `<section class="travel-destination-group"><div class="travel-group-heading"><span>${GROUP_LABELS[group]}</span><small>${items.length} destination${items.length === 1 ? '' : 's'}</small></div><div class="travel-destination-grid">${items.map((destination) => `
         <button type="button" class="travel-destination-card ${destination.id === this.destinationId ? 'is-selected' : ''}" data-travel-destination="${destination.id}" aria-pressed="${destination.id === this.destinationId}">
           <span class="travel-planet-dot" style="--travel-planet:#${PLANETS.find((planet) => planet.id === destination.id)?.color.toString(16).padStart(6, '0') ?? '63d4ff'}"></span>
-          <strong>${escapeHtml(destination.name)}</strong>
-          <small>${escapeHtml(destination.description)}</small>
+          <strong>${escapeHtml(i18n.objectName(destination.id))}</strong>
+          <small>${escapeHtml(i18n.text(destination.description))}</small>
           <div><span>${formatDuration(destination.estimatedDurationDays)}</span><span>${destination.id === 'earth' ? 'Local' : `${destination.distanceAu.toFixed(3)} AU`}</span></div>
         </button>`).join('')}</div></section>`;
     }).join('');
@@ -356,7 +370,7 @@ export class SpacecraftTravelController {
         ${destinationMarkup}
       </article>
       <article class="control-card travel-planner-card">
-        <div class="card-heading"><div><span class="eyebrow">Mission type</span><h3>${this.destinationId === 'earth' ? 'Earth orbital rehearsal' : `Earth → ${escapeHtml(this.plan?.destinationName ?? this.destinationId)}`}</h3></div></div>
+        <div class="card-heading"><div><span class="eyebrow">Mission type</span><h3>${this.destinationId === 'earth' ? 'Earth orbital rehearsal' : `${i18n.objectName('earth')} → ${escapeHtml(i18n.objectName(this.destinationId))}`}</h3></div></div>
         <div class="segmented-control travel-mission-types">
           <button type="button" data-mission-type="flyby" class="${this.missionType === 'flyby' ? 'is-active' : ''}" ${this.destinationId === 'earth' ? 'disabled' : ''}>Fly-by</button>
           <button type="button" data-mission-type="orbiter" class="${this.missionType === 'orbiter' ? 'is-active' : ''}">Orbiter</button>
@@ -378,9 +392,10 @@ export class SpacecraftTravelController {
         <label class="toggle-row"><span><strong>Auto-pause key events</strong><small>Pause at correction, approach and arrival.</small></span><input id="travel-auto-pause" type="checkbox" ${this.realism.autoPauseKeyEvents ? 'checked' : ''}><i aria-hidden="true"></i></label>
       </article>
       <article class="control-card travel-camera-card">
-        <div class="card-heading"><div><span class="eyebrow">Camera</span><h3>Follow or inspect freely</h3></div></div>
-        <div class="segmented-control"><button type="button" data-mission-camera="follow" class="${this.cameraMode === 'follow' ? 'is-active' : ''}">Follow</button><button type="button" data-mission-camera="free" class="${this.cameraMode === 'free' ? 'is-active' : ''}">Free</button></div>
+        <div class="card-heading"><div><span class="eyebrow">Camera & control</span><h3>Follow, pilot, or inspect freely</h3></div></div>
+        <div class="segmented-control"><button type="button" data-mission-camera="follow" class="${this.cameraMode === 'follow' ? 'is-active' : ''}">Follow</button><button type="button" data-mission-camera="pilot" class="${this.cameraMode === 'pilot' ? 'is-active' : ''}" ${this.active && this.plan?.valid ? '' : 'disabled'}>Pilot</button><button type="button" data-mission-camera="free" class="${this.cameraMode === 'free' ? 'is-active' : ''}">Free</button></div>
         <div class="segmented-control travel-follow-distance"><button type="button" data-follow-distance="near" class="${this.followDistance === 'near' ? 'is-active' : ''}">Near</button><button type="button" data-follow-distance="standard" class="${this.followDistance === 'standard' ? 'is-active' : ''}">Standard</button><button type="button" data-follow-distance="far" class="${this.followDistance === 'far' ? 'is-active' : ''}">Far</button></div>
+        <small class="travel-pilot-note">Pilot is a visual training offset. The scientific trajectory, mission progress, fuel and Delta-v remain unchanged.</small>
       </article>
       <article class="control-card travel-dashboard-card" data-travel-dashboard>${this.dashboardMarkup()}</article>
     `;
@@ -391,8 +406,9 @@ export class SpacecraftTravelController {
     if (!plan) return '<p class="empty-state">Select a destination to calculate a route.</p>';
     const departure = new Date(Date.parse('2026-01-01T00:00:00.000Z') + plan.departureSimulationDays * 86_400_000);
     const arrival = new Date(Date.parse('2026-01-01T00:00:00.000Z') + plan.arrivalSimulationDays * 86_400_000);
+    const i18n = createI18n(this.locale);
     return `
-      <div class="travel-plan-status ${plan.valid ? 'is-valid' : 'is-invalid'}"><strong>${plan.valid ? 'Route available' : 'Route rejected'}</strong><span>${escapeHtml(plan.valid ? plan.calculationModel : plan.rejectionReason ?? 'No valid route')}</span></div>
+      <div class="travel-plan-status ${plan.valid ? 'is-valid' : 'is-invalid'}"><strong>${plan.valid ? 'Route available' : 'Route rejected'}</strong><span>${escapeHtml(plan.valid ? i18n.text(plan.calculationModel) : missionRejectionText(plan.rejectionCode, plan.rejectionReason ?? 'No valid route', this.locale))}</span></div>
       <div class="travel-metric-grid">
         <div><span>Departure</span><strong>${departure.toISOString().slice(0, 10)}</strong><small>${formatDuration(plan.launchWindowWaitDays)} wait</small></div>
         <div><span>Arrival</span><strong>${arrival.toISOString().slice(0, 10)}</strong><small>${formatDuration(plan.durationDays)} flight</small></div>
@@ -401,8 +417,8 @@ export class SpacecraftTravelController {
         <div><span>Phase residual</span><strong>${plan.launchPhaseResidualDeg.toFixed(4)}°</strong><small>internal solver residual</small></div>
         <div><span>Fuel remaining</span><strong>${plan.fuelRemainingPercent.toFixed(1)}%</strong><small>${plan.realism.fuelSimulation ? 'simplified budget' : 'unlimited learning mode'}</small></div>
       </div>
-      <details class="science-details advanced-only" open><summary>Route comparison and scientific rejection</summary><div class="travel-route-options">${plan.routeOptions.map((route) => `<div class="travel-route-option ${route.supported ? 'is-supported' : 'is-unavailable'}"><span>${escapeHtml(route.label)}</span><strong>${route.supported ? 'Supported' : 'Unavailable'}</strong><p>${escapeHtml(route.scientificReason ?? route.summary)}</p></div>`).join('')}</div></details>
-      <details class="science-details advanced-only"><summary>Model limitations</summary><ul>${plan.limitations.map((limitation) => `<li>${escapeHtml(limitation)}</li>`).join('')}</ul></details>
+      <details class="science-details advanced-only" open><summary>Route comparison and scientific rejection</summary><div class="travel-route-options">${plan.routeOptions.map((route) => `<div class="travel-route-option ${route.supported ? 'is-supported' : 'is-unavailable'}"><span>${escapeHtml(i18n.text(route.label))}</span><strong>${route.supported ? 'Supported' : 'Unavailable'}</strong><p>${escapeHtml(i18n.text(route.scientificReason ?? route.summary))}</p></div>`).join('')}</div></details>
+      <details class="science-details advanced-only"><summary>Model limitations</summary><ul>${plan.limitations.map((limitation) => `<li>${escapeHtml(i18n.text(limitation))}</li>`).join('')}</ul></details>
     `;
   }
 
@@ -411,8 +427,9 @@ export class SpacecraftTravelController {
     if (!plan) return '<div class="card-heading"><div><span class="eyebrow">Mission dashboard</span><h3>No mission planned</h3></div></div>';
     const state = this.options.getMissionState() ?? missionStateMachine.stateAt(plan, this.options.getSimulationDays());
     const progress = Math.round(state.progress * 1000) / 10;
+    const i18n = createI18n(this.locale);
     return `
-      <div class="card-heading"><div><span class="eyebrow">Mission dashboard</span><h3>${escapeHtml(formatMissionStatus(state.status))}</h3></div><span class="accuracy-chip ${state.completed ? '' : 'is-warning'}">${this.active ? 'Mission active' : 'Route preview'}</span></div>
+      <div class="card-heading"><div><span class="eyebrow">Mission dashboard</span><h3>${escapeHtml(i18n.text(formatMissionStatus(state.status)))}</h3></div><span class="accuracy-chip ${state.completed ? '' : 'is-warning'}">${this.active ? 'Mission active' : 'Route preview'}</span></div>
       <div class="travel-progress" role="progressbar" aria-label="Mission progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><i style="width:${progress}%"></i></div>
       <div class="travel-metric-grid compact">
         <div><span>Progress</span><strong>${progress.toFixed(1)}%</strong></div>
@@ -420,7 +437,7 @@ export class SpacecraftTravelController {
         <div><span>Remaining path</span><strong>${formatDistance(state.remainingDistanceAu)}</strong></div>
         <div><span>Fuel</span><strong>${state.fuelRemainingPercent.toFixed(1)}%</strong></div>
       </div>
-      <div class="travel-event-strip">${plan.keyEvents.map((event) => `<span class="${state.progress >= event.progress ? 'is-complete' : ''}"><i></i>${escapeHtml(event.label)}</span>`).join('')}</div>
+      <div class="travel-event-strip">${plan.keyEvents.map((event) => `<span class="${state.progress >= event.progress ? 'is-complete' : ''}"><i></i>${escapeHtml(i18n.text(event.label))}</span>`).join('')}</div>
     `;
   }
 

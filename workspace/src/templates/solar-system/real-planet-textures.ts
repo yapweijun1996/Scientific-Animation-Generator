@@ -655,6 +655,11 @@ export class RealPlanetTextureManager {
     if (snapshot) restoreMaterial(material, snapshot);
 
     material.map = day;
+    // The procedural relief map is not registered to the real albedo and causes
+    // high-frequency lighting shimmer while the scientifically timed globe rotates.
+    material.bumpMap = null;
+    material.bumpScale = 0;
+    material.normalMap = null;
     material.emissiveMap = night;
     material.emissive.setHex(0xffd38a);
     material.emissiveIntensity = 0.56;
@@ -670,7 +675,12 @@ export class RealPlanetTextureManager {
     cloudMaterial.opacity = 0.84;
     cloudMaterial.alphaTest = 0.08;
     cloudMaterial.transparent = true;
+    cloudMaterial.depthTest = true;
     cloudMaterial.depthWrite = false;
+    cloudMaterial.polygonOffset = true;
+    cloudMaterial.polygonOffsetFactor = -1;
+    cloudMaterial.polygonOffsetUnits = -1;
+    material.needsUpdate = true;
     cloudMaterial.needsUpdate = true;
   }
 

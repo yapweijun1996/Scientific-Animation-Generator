@@ -6,6 +6,7 @@ import { planetPositionAu } from '../templates/solar-system/orbital-math';
 import { astronomicalEventEngine } from './astronomical-event-engine';
 import { baselineAstronomyEngine } from './baseline-astronomy-engine';
 import type { AstronomicalEvent, ScientificAccuracyReport, ScientificRegressionCheck, Vector3Au } from './types';
+import { createI18n, type AppLocale } from '../i18n';
 
 function distance(a: Vector3Au, b: Vector3Au): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -323,9 +324,56 @@ function computeScientificAccuracyRegression(): ScientificAccuracyReport {
   };
 }
 
-export function scientificAccuracyReportMarkdown(report = runScientificAccuracyRegression()): string {
+function scientificAccuracyReportMarkdownZh(report: ScientificAccuracyReport): string {
+  const i18n = createI18n('zh-CN');
+  const checkTitles: Record<string, string> = {
+    'earth-period-repeat': '地球经过一个周期后回到模型轨道位置',
+    'moon-period-repeat': '月球经过一个周期后回到模型地心轨道位置',
+    'moon-synodic-cycle': '连续新月事件位于预期朔望周期范围内',
+    'moon-phase-catalogue': '月相事件目录包含四种主要月相',
+    'eclipse-geometry-candidates': '食现象教学候选事件需要主要月相并接近模型轨道交点',
+    'eclipse-local-authority-guard': '食现象候选事件明确标注为非权威本地情况',
+    'mars-conjunction-residual': '火星合事件收敛至模型太阳黄经',
+    'mars-opposition-residual': '火星冲事件收敛至与模型太阳相距 180°',
+    'earth-apsis-order': '地球近日点距离小于远日点距离',
+    'observer-location-difference': '不同观测地点产生不同高度角结果',
+    'time-zone-conversion': '观测者当地时间转换遵循 IANA 时区',
+    'event-catalogue-sorted': '事件目录数值有限且按时间排序',
+    'verified-range-boundaries': '提供器日期范围边界为所有受支持天体产生有限状态',
+  };
+  const metricTitles: Record<string, string> = {
+    'orbital-repeat-vector-residual': '轨道周期重复向量残差',
+    'event-angular-residual': '主要月相黄经与相对事件角残差',
+  };
+  const reportValue = (value: string): string => value
+    .replaceAll('vector error', '向量误差')
+    .replaceAll('days', '天')
+    .replaceAll('candidates', '个候选事件')
+    .replaceAll('events', '个事件')
+    .replaceAll('max residual', '最大残差')
+    .replaceAll('altitude difference', '高度角差')
+    .replaceAll('finite chronological', '个有限且按时间排序的')
+    .replaceAll('finite boundary states', '个有限边界状态')
+    .replaceAll('Missing successive New Moon events', '缺少连续新月事件')
+    .replaceAll('Missing apsis event', '缺少拱点事件')
+    .replaceAll('No events', '没有事件');
   const rows = report.checks
-    .map((item) => `| ${item.passed ? 'PASS' : 'FAIL'} | ${item.title} | ${item.measured} | ${item.threshold} |`)
+    .map((item) => `| ${item.passed ? '通过' : '失败'} | ${checkTitles[item.id] ?? i18n.text(item.title)} | ${reportValue(item.measured)} | ${reportValue(item.threshold)} |`)
+    .join('\n');
+  const metrics = report.errorMetrics
+    .map((metric) => `| ${metricTitles[metric.id] ?? metric.title} | ${metric.sampleCount} | ${metric.average.toExponential(6)} ${metric.unit} | ${metric.maximum.toExponential(6)} ${metric.unit} | ${metric.id === 'orbital-repeat-vector-residual' ? '模型地球与月球轨道的内部确定性重复检查。' : '仅为内部求解器残差；不是相对于外部星历数据集的绝对误差。'} |`)
+    .join('\n');
+  return `# 科学精度报告 — v${report.version}\n\n生成时间：${report.generatedAtIso}\n\n## 结果\n\n- 状态：**${report.passed ? '通过' : '失败'}**\n- 检查：${report.passCount} 项通过，${report.failCount} 项失败\n- 天文测试事件数：${report.testEventCount}\n- 提供器：${i18n.text(report.provider.name)} ${report.provider.version}\n- 已验证日期范围：${report.verifiedDateRange}\n- 精度标签：教学级精度\n\n## 科学分类\n\n- **已计算：** 已验证范围内的天体状态、月相、相对事件、拱点与观测者坐标由确定性提供器计算。\n- **教学近似：** 月球轨道、食现象候选几何、合/冲及相关事件时间使用已公开的基线模型。\n- **视觉增强：** 学习比例和真实距离只改变显示，不改变计算模型。\n\n教学用食现象几何候选**不是权威的本地接触时刻预测**。\n\n## 回归检查\n\n| 结果 | 检查 | 测量值 | 阈值 |\n|---|---|---|---|\n${rows}\n\n## 内部误差指标\n\n| 指标 | 样本 | 平均值 | 最大值 | 适用范围 |\n|---|---:|---:|---:|---|\n${metrics}\n\n## 来源\n\n- 来源：${report.provider.source}\n- 许可：${report.provider.licence}\n- 坐标系：${report.provider.coordinateSystem}\n- 历元：${report.provider.epoch}\n- 预期误差：${i18n.text(report.provider.expectedError)}\n- 最后验证：${report.provider.lastValidatedIso}\n\n## 已知限制\n\n${report.knownLimitations.map((item) => `- ${i18n.text(item)}`).join('\n')}\n\n## 重要适用性声明\n\n本版本属于教学模拟，不得用于航天器导航、安全关键规划、民用食现象接触时刻、法定计时或专业天文台排程。\n`;
+}
+
+export function scientificAccuracyReportMarkdown(
+  report = runScientificAccuracyRegression(),
+  locale: AppLocale = 'en',
+): string {
+  if (locale === 'zh-CN') return scientificAccuracyReportMarkdownZh(report);
+  const i18n = createI18n(locale);
+  const rows = report.checks
+    .map((item) => `| ${item.passed ? 'PASS' : 'FAIL'} | ${i18n.text(item.title)} | ${item.measured} | ${item.threshold} |`)
     .join('\n');
   const metrics = report.errorMetrics
     .map(

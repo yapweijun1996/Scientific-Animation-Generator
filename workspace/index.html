@@ -22,15 +22,17 @@
     <div id="app">
       <main id="boot-status" role="status" aria-live="polite">
         <div>
-          <strong>Scientific Animation Generator</strong>
+          <strong id="boot-title">Scientific Animation Generator</strong>
           <p id="boot-message">Loading the offline editor…</p>
           <button id="boot-retry" type="button" hidden onclick="location.reload()">Retry</button>
         </div>
       </main>
     </div>
     <script>
-      addEventListener('offline',()=>{const m=document.getElementById('boot-message'),b=document.getElementById('boot-retry');if(m)m.textContent='You are offline. Open the app once online to prepare its offline cache, then it can run without a connection.';if(b)b.hidden=false});
-      setTimeout(()=>{const s=document.getElementById('boot-status');if(!s)return;const m=document.getElementById('boot-message'),b=document.getElementById('boot-retry');if(m)m.textContent=navigator.onLine?'The editor is taking longer than expected. Retry the app.':'Offline cache is not ready on this device yet. Connect once, reopen the app, and wait for “Offline ready”.';if(b)b.hidden=false},8000);
+      let bootChinese=false;try{bootChinese=localStorage.getItem('solar-explorer-v08-locale')==='zh-CN'}catch{}
+      if(bootChinese){document.documentElement.lang='zh-CN';document.title='科学动画生成器';document.getElementById('boot-title').textContent='科学动画生成器';document.getElementById('boot-message').textContent='正在加载离线编辑器…';document.getElementById('boot-retry').textContent='重试'}
+      addEventListener('offline',()=>{const m=document.getElementById('boot-message'),b=document.getElementById('boot-retry');if(m)m.textContent=bootChinese?'当前处于离线状态。请先联网打开一次应用以准备离线缓存，之后即可离线运行。':'You are offline. Open the app once online to prepare its offline cache, then it can run without a connection.';if(b)b.hidden=false});
+      setTimeout(()=>{const s=document.getElementById('boot-status');if(!s)return;const m=document.getElementById('boot-message'),b=document.getElementById('boot-retry');if(m)m.textContent=bootChinese?(navigator.onLine?'编辑器加载时间较长，请重试应用。':'此设备尚未准备好离线缓存。请连接网络一次、重新打开应用并等待“离线就绪”。'):(navigator.onLine?'The editor is taking longer than expected. Retry the app.':'Offline cache is not ready on this device yet. Connect once, reopen the app, and wait for “Offline ready”.');if(b)b.hidden=false},8000);
     </script>
     <script type="module" src="/src/main.ts"></script>
   </body>

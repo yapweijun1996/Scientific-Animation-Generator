@@ -1,5 +1,9 @@
 import type { SimulationStepResult } from './simulation-clock';
 import type { MissionSnapshot } from '../travel/types';
+import type { AppLocale } from '../i18n';
+
+export type ViewMode = 'overview' | 'track' | 'inspect' | 'free';
+export type LegacyViewMode = ViewMode | 'focus';
 
 export type RendererKind = 'three' | 'svg' | 'canvas';
 export type ParameterValue = number | boolean | string;
@@ -97,7 +101,7 @@ export interface TemplateSnapshot {
   simulationDays: number;
   seed: number;
   focusedObject?: string;
-  viewMode?: 'overview' | 'focus' | 'free';
+  viewMode?: LegacyViewMode;
   playing?: boolean;
   clock?: SimulationClockSnapshot;
   experience?: 'explore' | 'learn' | 'travel';
@@ -146,6 +150,9 @@ export interface ScientificTemplateRuntime {
   play(): void;
   pause(): void;
   reset(): void;
+  setLocale(locale: AppLocale): void;
+  trackObject(id: string): void;
+  inspectObject(id: string): void;
   focusObject(id: string): void;
   zoomCamera(factor: number): void;
   frameOverview(): void;

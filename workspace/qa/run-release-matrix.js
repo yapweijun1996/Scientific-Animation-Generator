@@ -142,8 +142,11 @@ function validateTravelShard(shard, result) {
       throw new Error(`${shard.key} omitted catalogue/start/restore evidence.`);
     }
     if (!(Number(result.progressAdvanced) > 0)) throw new Error(`${shard.key} did not advance mission progress.`);
-    if (!result.cameraModes?.includes('follow') || !result.cameraModes?.includes('free')) {
-      throw new Error(`${shard.key} omitted Follow/Free camera evidence.`);
+    if (!result.cameraModes?.includes('follow') || !result.cameraModes?.includes('pilot') || !result.cameraModes?.includes('free')) {
+      throw new Error(`${shard.key} omitted Follow/Pilot/Free camera evidence.`);
+    }
+    if (!result.assistedPilot?.moved || !result.assistedPilot?.rejoined || !result.assistedPilot?.scientificProgressUnchanged) {
+      throw new Error(`${shard.key} omitted assisted-pilot isolation/rejoin evidence.`);
     }
   } else {
     if (!result.directFile || !result.noHttpRequests) throw new Error(`${shard.key} omitted direct file/no-network evidence.`);
@@ -152,6 +155,9 @@ function validateTravelShard(shard, result) {
     }
     if (Math.abs(Number(result.replannedMission?.progress) - 0.25) > 1e-8) {
       throw new Error(`${shard.key} omitted deterministic 25% mission progress evidence.`);
+    }
+    if (!result.cameraModes?.includes('pilot') || !result.assistedPilot?.moved || !result.assistedPilot?.rejoined) {
+      throw new Error(`${shard.key} omitted standalone assisted-pilot evidence.`);
     }
   }
 }
@@ -163,6 +169,8 @@ try {
   mkdirSync(evidenceRoot, { recursive: true });
   rmSync(join(evidenceRoot, 'browser-matrix.json'), { force: true });
 
+  await run(process.execPath, ['qa/view-interaction-policy.js']);
+  await run(process.execPath, ['qa/i18n-policy.js']);
   console.log('release-matrix:build');
   await run('npm', ['run', 'build']);
   await run(process.execPath, ['qa/cleanup-generated.js']);
@@ -170,6 +178,7 @@ try {
   await run('npm', ['exec', '--', 'vite', 'build', '--config', 'qa/domain-vite.config.js']);
   await run(process.execPath, ['qa/export-smoke.js']);
   await run(process.execPath, ['qa/domain-smoke.js']);
+  await run(process.execPath, ['qa/i18n-browser-qa.js']);
 
   for (let index = 0; index < standardShards.length; index += 1) {
     const shard = standardShards[index];
@@ -266,7 +275,8 @@ try {
       standaloneGates: travelResults.filter((entry) => entry.kind === 'travel-standalone'),
       directAndGravityAssistRejection: true,
       snapshotRestore: true,
-      followFreeCamera: true,
+      followPilotFreeCamera: true,
+      assistedPilotScientificIsolation: true,
     },
     screenshotsCaptured: captureScreenshots,
     shards: [...standardResults, ...travelResults],

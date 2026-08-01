@@ -472,25 +472,27 @@ input[type="range"] { width:100%; min-height:44px; margin:0; accent-color:var(--
 .science-detail-list b { overflow-wrap:anywhere; color:#dcecff; font-size:8px; font-weight:650; line-height:1.45; text-align:right; }
 
 .mode-intro-card { grid-column:1/-1; border-color:rgba(88,226,161,.2); background:linear-gradient(135deg,rgba(30,117,82,.12),rgba(255,255,255,.015)); }
-.learning-module-picker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; grid-column:1/-1; }
-.learning-module-picker button { display:grid; min-height:72px; padding:10px; align-content:center; border:1px solid var(--line); border-radius:13px; background:rgba(255,255,255,.025); color:var(--muted); cursor:pointer; text-align:left; }
+.learning-module-picker { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; min-width:0; }
+.learning-module-picker button { display:grid; min-width:0; min-height:92px; padding:13px; align-content:center; border:1px solid var(--line); border-radius:13px; background:rgba(255,255,255,.025); color:var(--muted); cursor:pointer; text-align:left; }
 .learning-module-picker button.is-active { border-color:rgba(88,226,161,.34); background:rgba(88,226,161,.1); color:#effff7; }
-.learning-module-picker strong { font-size:10px; }
-.learning-module-picker small { margin-top:5px; font-size:8px; line-height:1.4; }
-.learning-stage-card { grid-column:1/-1; padding:16px; border:1px solid rgba(88,226,161,.2); border-radius:16px; background:radial-gradient(circle at 90% 0,rgba(88,226,161,.1),transparent 36%),linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.012)); }
+.learning-module-picker strong { overflow-wrap:anywhere; font-size:12px; line-height:1.3; }
+.learning-module-picker small { margin-top:6px; overflow-wrap:anywhere; font-size:10px; line-height:1.45; }
+.learning-stage-card { min-width:0; padding:20px; border:1px solid rgba(88,226,161,.2); border-radius:16px; background:radial-gradient(circle at 90% 0,rgba(88,226,161,.1),transparent 36%),linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.012)); }
 .learning-stage-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-.learning-stage-header h3 { margin:4px 0 0; font-size:16px; }
-.learning-stage-header > span { color:var(--accent); font-size:9px; }
-.lesson-progress { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:12px 0; }
-.lesson-progress i { height:3px; border-radius:999px; background:rgba(157,190,226,.16); }
+.learning-stage-header h3 { margin:5px 0 0; font-size:20px; line-height:1.2; }
+.learning-step-count { flex:0 0 auto; padding:4px 7px; border:1px solid rgba(99,212,255,.22); border-radius:999px; background:rgba(99,212,255,.07); color:var(--accent); font-size:10px; font-variant-numeric:tabular-nums; }
+.learning-stage-summary { max-width:72ch; margin:14px 0 16px !important; color:#dcecff !important; font-size:14px !important; line-height:1.55 !important; }
+.lesson-progress { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:0 0 16px; }
+.lesson-progress i { height:4px; border-radius:999px; background:rgba(157,190,226,.16); }
 .lesson-progress i.is-complete { background:var(--success); box-shadow:0 0 8px rgba(88,226,161,.38); }
-.lesson-step { padding:13px; border:1px solid var(--line); border-radius:12px; background:rgba(1,9,17,.46); }
-.lesson-step strong { display:block; margin-top:5px; font-size:12px; }
-.lesson-actions { display:grid; grid-template-columns:1fr 1.3fr 1fr; gap:8px; margin-top:12px; }
-.lesson-actions button { min-height:42px; padding:0 10px; font-size:9px; }
-.moon-phase-card { display:grid; grid-template-columns:74px minmax(0,1fr); align-items:center; gap:14px; min-height:104px; padding:14px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(145deg,rgba(255,255,255,.04),rgba(255,255,255,.012)); }
-.moon-phase-card strong { display:block; margin-top:4px; font-size:14px; }
-.moon-phase-card p { margin:5px 0 0; color:var(--muted); font-size:9px; }
+.lesson-step { padding:16px; border:1px solid var(--line); border-radius:12px; background:rgba(1,9,17,.46); }
+.lesson-step strong { display:block; margin-top:6px; font-size:14px; line-height:1.35; }
+.lesson-step-copy { margin:10px 0 0 !important; color:#c7d9eb !important; font-size:12px !important; line-height:1.6 !important; }
+.lesson-actions { display:grid; grid-template-columns:1fr 1.3fr 1fr; gap:10px; margin-top:14px; }
+.lesson-actions button { min-height:44px; padding:0 12px; font-size:11px; }
+.moon-phase-card { display:grid; grid-template-columns:74px minmax(0,1fr); align-items:center; gap:14px; height:100%; min-height:116px; padding:16px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(145deg,rgba(255,255,255,.04),rgba(255,255,255,.012)); }
+.moon-phase-card strong { display:block; margin-top:5px; font-size:16px; line-height:1.25; }
+.moon-phase-card p { margin:6px 0 0; color:var(--muted); font-size:10px; line-height:1.45; }
 .moon-phase-visual { position:relative; width:68px; height:68px; overflow:hidden; border-radius:50%; background:#151719; box-shadow:inset -12px -4px 20px rgba(0,0,0,.75),0 0 24px rgba(210,221,235,.1); }
 .moon-phase-visual::before { position:absolute; inset:0; border-radius:inherit; background:radial-gradient(circle at 32% 28%,#f2eee3,#aaa8a2 62%,#55565a); content:""; clip-path:inset(0 calc(100% - var(--phase-lit)) 0 0 round 50%); }
 .moon-phase-visual i { position:absolute; inset:0; border-radius:inherit; background:radial-gradient(circle at 32% 35%,rgba(40,40,41,.24) 0 5%,transparent 6%),radial-gradient(circle at 66% 60%,rgba(35,35,36,.22) 0 8%,transparent 9%); }
@@ -684,4 +686,246 @@ dialog.control-center::backdrop { background:rgba(0,3,9,.78); }
   .control-center-body { overscroll-behavior:contain; }
   .control-tabs { gap:4px; padding-right:8px; padding-left:8px; }
   .control-tabs button { min-height:38px; padding:0 8px; font-size:11px; }
+}
+
+/* v0.8 bilingual language control */
+.control-center-header { grid-template-columns:minmax(0,1fr) auto auto auto 44px; }
+.locale-switch { display:grid; gap:4px; min-width:112px; color:var(--muted); font-size:8px; }
+.locale-switch select { min-height:40px; padding:0 9px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.04); color:var(--text); }
+html[data-locale="zh-CN"] body { font-family:Inter,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",system-ui,sans-serif; }
+
+@media (max-width:1180px) and (min-width:901px) {
+  .control-center-header { grid-template-columns:minmax(0,1fr) auto auto 44px; }
+  .locale-switch { grid-column:2; grid-row:1; }
+  .complexity-switch { grid-column:3; grid-row:1; }
+}
+
+@media (max-width:900px), (orientation:portrait) and (max-width:1100px) {
+  .control-center-header { grid-template-columns:minmax(0,1fr) auto auto 44px; }
+  .locale-switch { grid-column:2; grid-row:1; }
+  .complexity-switch { grid-column:3; grid-row:1; }
+}
+
+@media (max-width:620px) {
+  .control-center-header { grid-template-columns:minmax(0,1fr) 104px auto 40px; }
+  .locale-switch { min-width:0; }
+  .locale-switch > span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .locale-switch select { width:104px; min-height:36px; padding:0 6px; font-size:8px; }
+}
+
+/* Responsive shell and control-center layout. Keep this final section authoritative so
+   the wide, compact drawer, and immersive modes share one predictable cascade. */
+.editor-grid { position:relative; }
+.topbar-locale-switch {
+  display:flex;
+  min-height:44px;
+  align-items:center;
+  gap:6px;
+  padding:0 8px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:rgba(255,255,255,.035);
+  color:var(--muted);
+}
+.topbar-locale-switch > span[aria-hidden] { color:var(--accent); font-size:15px; }
+.topbar-locale-switch select { min-width:90px; height:42px; padding:0 22px 0 2px; border:0; background:transparent; color:var(--text); cursor:pointer; font-size:12px; }
+.mobile-locale-switch { display:none; }
+
+.side-panel { display:grid; grid-template-rows:auto minmax(0,1fr) auto; padding:0; overflow:hidden; }
+.side-panel .panel-heading { min-height:64px; margin:0; padding:14px 12px 10px; border-bottom:1px solid rgba(157,190,226,.08); background:rgba(7,17,31,.98); }
+.side-panel-scroll { min-height:0; overflow:auto; padding:10px 12px 14px; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:rgba(140,170,206,.18) transparent; }
+.inspector-scroll { padding-top:0; }
+.panel-heading-actions { display:flex; align-items:flex-start; gap:7px; }
+.compact-panel-close { display:none; width:44px; min-height:44px; padding:0; place-items:center; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.04); color:var(--text); font-size:20px; cursor:pointer; }
+.template-card { align-items:start; }
+.template-card-copy { display:grid; min-width:0; gap:3px; }
+.template-card-copy em { position:static; justify-self:start; margin-top:4px; padding:3px 6px; border:1px solid rgba(99,212,255,.22); border-radius:999px; background:rgba(99,212,255,.07); }
+.template-card:disabled .template-card-copy em { border-color:var(--line); background:rgba(255,255,255,.03); }
+.panel-footer { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:0; padding:10px 12px 12px; border-top:1px solid var(--line); background:rgba(5,14,25,.98); }
+.panel-history-button { display:flex; min-width:0; min-height:44px; align-items:center; justify-content:center; gap:7px; padding:0 9px; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.045); color:var(--text); cursor:pointer; font-size:12px; font-weight:700; }
+.panel-history-button:hover { border-color:var(--line-strong); background:rgba(255,255,255,.08); }
+.compact-drawer-backdrop { display:none; }
+
+.control-center-header {
+  grid-template-columns:minmax(0,1fr) auto auto 44px;
+  grid-template-areas:"title experience complexity close";
+}
+.control-center-header > :first-child { grid-area:title; min-width:0; }
+#experience-switch-root { grid-area:experience; }
+.mobile-locale-switch { grid-area:locale; }
+.complexity-switch { grid-area:complexity; }
+.control-center-close { grid-area:close; }
+.control-tabs { mask-image:none; }
+.control-tabs.has-overflow-start.has-overflow-end { mask-image:linear-gradient(to right,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%); }
+.control-tabs.has-overflow-start:not(.has-overflow-end) { mask-image:linear-gradient(to right,transparent 0,#000 18px); }
+.control-tabs.has-overflow-end:not(.has-overflow-start) { mask-image:linear-gradient(to right,#000 calc(100% - 18px),transparent 100%); }
+
+.control-tab-panel[data-control-panel="time"] {
+  grid-template-areas:
+    "clock clock"
+    "quick jump"
+    "events events"
+    "advanced custom";
+}
+.control-tab-panel[data-control-panel="time"] .time-now-card { grid-area:clock; }
+.time-quick-card { grid-area:quick; }
+.time-jump-card { grid-area:jump; }
+.time-events-card { grid-area:events; }
+.time-advanced-card { grid-area:advanced; }
+.time-custom-card { grid-area:custom; }
+.app-shell[data-complexity="basic"] .time-custom-card { grid-column:1/-1; }
+.time-events-card .event-catalogue.compact { grid-template-columns:repeat(2,minmax(0,1fr)); max-height:none; overflow:visible; padding-right:0; }
+.time-custom-card .wide-button { margin-top:12px; }
+.preset-form-grid { align-items:end; column-gap:10px; row-gap:10px; }
+.preset-form-grid .control-field { margin-top:0; }
+
+/* Guide uses one reading sequence instead of the generic two-column card flow. */
+.control-tab-panel[data-control-panel="learn"] {
+  grid-template-columns:minmax(250px,.58fr) minmax(0,1.42fr);
+  grid-template-areas:
+    "intro intro"
+    "moon modules"
+    "stage stage"
+    "events events";
+  gap:14px;
+}
+.learning-intro-card { grid-area:intro; padding:16px; }
+.learning-intro-card > strong { display:block; margin-top:5px; font-size:14px; line-height:1.35; }
+.learning-intro-card > p { max-width:90ch; margin:7px 0 0 !important; font-size:10px !important; line-height:1.55 !important; }
+#moon-phase-root { grid-area:moon; min-width:0; }
+#learning-module-root { display:contents; }
+.learning-module-picker { grid-area:modules; }
+.learning-stage-card { grid-area:stage; }
+.learning-events-card { grid-area:events; }
+
+@media (min-width:1200px) {
+  .app-shell[data-responsive-shell="wide"] .compact-drawer-backdrop { display:none; }
+}
+
+@media (min-width:901px) and (max-width:1199px) {
+  .topbar { grid-template-columns:minmax(210px,1fr) max-content max-content; gap:10px; }
+  .topbar-center { display:flex; }
+  .topbar-center .status-pill { display:none; }
+  #toggle-templates-panel { display:inline-flex; }
+  #copy-embed-button,
+  #fullscreen-button,
+  #install-button { display:none !important; }
+  .topbar-actions { gap:6px; }
+  .topbar-actions .secondary-button { padding:0 10px; }
+
+  .app-shell[data-responsive-shell="compact"] .editor-grid,
+  .app-shell[data-responsive-shell="compact"][data-left-panel-collapsed="true"] .editor-grid,
+  .app-shell[data-responsive-shell="compact"][data-right-panel-collapsed="true"] .editor-grid,
+  .app-shell[data-responsive-shell="compact"][data-left-panel-collapsed="true"][data-right-panel-collapsed="true"] .editor-grid { grid-template-columns:minmax(0,1fr); }
+  .app-shell[data-responsive-shell="compact"] .workspace { grid-column:1; width:100%; }
+  .app-shell[data-responsive-shell="compact"] .compact-drawer-backdrop {
+    position:absolute;
+    z-index:30;
+    inset:0;
+    display:block;
+    width:100%;
+    height:100%;
+    padding:0;
+    border:0;
+    border-radius:0;
+    background:rgba(0,3,9,.58);
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity 160ms ease,visibility 160ms ease;
+  }
+  .app-shell[data-responsive-shell="compact"][data-compact-drawer="templates"] .compact-drawer-backdrop,
+  .app-shell[data-responsive-shell="compact"][data-compact-drawer="inspector"] .compact-drawer-backdrop { opacity:1; visibility:visible; pointer-events:auto; }
+  .app-shell[data-responsive-shell="compact"] #templates-panel,
+  .app-shell[data-responsive-shell="compact"] #inspector-panel {
+    position:absolute;
+    z-index:31;
+    top:0;
+    bottom:0;
+    display:grid !important;
+    width:min(320px,calc(100% - 56px));
+    padding:0;
+    border:0;
+    background:#07111f;
+    box-shadow:0 24px 70px rgba(0,0,0,.62);
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:transform 180ms ease,opacity 160ms ease,visibility 180ms ease;
+  }
+  .app-shell[data-responsive-shell="compact"] #templates-panel { left:0; width:min(280px,calc(100% - 56px)); border-right:1px solid var(--line-strong); transform:translateX(-102%); }
+  .app-shell[data-responsive-shell="compact"] #inspector-panel { right:0; border-left:1px solid var(--line-strong); transform:translateX(102%); }
+  .app-shell[data-responsive-shell="compact"][data-compact-drawer="templates"] #templates-panel,
+  .app-shell[data-responsive-shell="compact"][data-compact-drawer="inspector"] #inspector-panel { opacity:1; visibility:visible; pointer-events:auto; transform:translateX(0); }
+  .app-shell[data-responsive-shell="compact"] .compact-panel-close { display:grid; }
+  .app-shell[data-responsive-shell="compact"] .scene-count { display:none; }
+}
+
+@media (max-width:900px), (orientation:portrait) and (max-width:1100px) {
+  .topbar-locale-switch { display:none; }
+  dialog.control-center { align-items:end; padding:0; }
+  .control-center-surface { align-self:end; width:100%; height:min(92dvh,900px); margin:0; border-width:1px 0 0; border-radius:22px 22px 0 0; }
+  .control-center-header {
+    grid-template-columns:minmax(0,1fr) auto 44px;
+    grid-template-areas:
+      "title locale close"
+      "experience complexity complexity";
+    gap:9px;
+  }
+  .mobile-locale-switch { display:grid; min-width:104px; }
+  .mobile-locale-switch > span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .mobile-locale-switch select { width:104px; min-height:44px; padding:0 7px; font-size:12px; }
+  .experience-switch { width:100%; }
+  .experience-switch button,
+  .complexity-switch button,
+  .control-tabs button { min-height:44px; font-size:12px; }
+  .experience-switch button { flex:1; }
+  .control-tab-panel[data-control-panel="time"] {
+    grid-template-columns:minmax(0,1fr);
+    grid-template-areas:"clock" "quick" "jump" "events" "advanced" "custom";
+  }
+  .control-tab-panel[data-control-panel="learn"] {
+    grid-template-columns:minmax(0,1fr);
+    grid-template-areas:"intro" "moon" "modules" "stage" "events";
+    gap:12px;
+  }
+  .learning-module-picker { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .learning-module-picker button { min-height:84px; }
+  .app-shell[data-complexity="basic"] .time-custom-card { grid-column:auto; }
+  .time-events-card .event-catalogue.compact { grid-template-columns:minmax(0,1fr); }
+  .preset-form-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .preset-form-grid .control-field:first-child { grid-column:1/-1; }
+  .control-center-footer button { min-height:44px; }
+}
+
+@media (max-width:620px) {
+  .control-center-surface { height:100dvh; max-height:none; border:0; border-radius:0; }
+  .control-center-header { padding-top:calc(10px + env(safe-area-inset-top)); }
+  .control-center-header .eyebrow { display:none; }
+  .control-center-header h2 { margin:0; font-size:16px; }
+  .control-center-close { width:44px; min-height:44px; }
+  .floating-control-button { width:auto; min-width:118px; min-height:48px; padding:0 16px; border-radius:16px; }
+  .floating-control-button small { display:block; }
+  .learning-intro-card { padding:14px; }
+  .learning-intro-card > strong { font-size:13px; }
+  .learning-module-picker {
+    grid-template-columns:none;
+    grid-auto-flow:column;
+    grid-auto-columns:minmax(218px,82%);
+    max-width:100%;
+    overflow-x:auto;
+    padding:0 2px 5px;
+    scroll-snap-type:x proximity;
+    scrollbar-width:thin;
+    contain:inline-size paint;
+  }
+  .learning-module-picker button { min-height:78px; scroll-snap-align:start; }
+  .learning-stage-card { padding:15px; }
+  .learning-stage-header h3 { font-size:18px; }
+  .learning-stage-summary { margin:12px 0 14px !important; font-size:13px !important; }
+  .lesson-step { padding:14px; }
+  .lesson-step-copy { font-size:12px !important; }
+  .lesson-actions { gap:8px; }
+  .lesson-actions button { min-height:44px; font-size:10px; }
+  .moon-phase-card { min-height:104px; padding:14px; }
 }

@@ -174,6 +174,9 @@ parentWatch = setInterval(() => {
 acquireLock();
 try {
   await run(process.execPath, ['qa/render-performance-policy.js']);
+  await run(process.execPath, ['qa/view-interaction-policy.js']);
+  await run(process.execPath, ['qa/interactive-visual-policy.js']);
+  await run(process.execPath, ['qa/i18n-policy.js']);
   if (!skipPrebuild) {
     await run('npm', ['run', 'build']);
     await run(process.execPath, ['qa/cleanup-generated.js']);
@@ -181,6 +184,7 @@ try {
     await run('npm', ['exec', '--', 'vite', 'build', '--config', 'qa/domain-vite.config.js']);
     await run(process.execPath, ['qa/export-smoke.js']);
     await run(process.execPath, ['qa/domain-smoke.js']);
+    await run(process.execPath, ['qa/i18n-browser-qa.js']);
   }
   await run(process.execPath, ['qa/browser-qa.js']);
   await run(process.execPath, ['qa/cleanup-generated.js']);

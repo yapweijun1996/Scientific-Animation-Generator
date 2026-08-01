@@ -3,6 +3,7 @@ import type { TemplateSnapshot } from '../core/template-protocol';
 import { APP_VERSION } from '../core/app-config';
 import { createStandaloneHtml } from './standalone-export';
 import { loadTextureDataUrls } from './planet-texture-export';
+import type { AppLocale } from '../i18n';
 
 export type ZipExportPhase = 'preparing' | 'compressing' | 'complete';
 
@@ -47,6 +48,7 @@ function compressArchive(
 export async function downloadSourceZip(
   snapshot: TemplateSnapshot,
   onProgress: (phase: ZipExportPhase) => void = () => undefined,
+  locale: AppLocale = 'en',
 ): Promise<void> {
   // index.html embeds textures as data URLs (via textureSources) so it opens directly from
   // disk with no server: browsers block WebGL texImage2D reads from file:// image files as a
@@ -55,7 +57,7 @@ export async function downloadSourceZip(
   const textureSources = await loadTextureDataUrls();
   const archive: Record<string, Uint8Array> = {};
 
-  const html = createStandaloneHtml(snapshot, textureSources);
+  const html = createStandaloneHtml(snapshot, textureSources, locale);
   const project = JSON.stringify(
     { format: 'scienceproject', formatVersion: 1, createdAt: new Date().toISOString(), snapshot },
     null,

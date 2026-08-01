@@ -28,6 +28,14 @@ import {
   type StandaloneRuntimeApi,
   type StandaloneRuntimeConfig,
 } from './standalone-types';
+import {
+  createI18n,
+  DomLocalizer,
+  missionRejectionText,
+  normalizeLocale,
+  setDocumentLocale,
+  type AppLocale,
+} from '../i18n';
 
 export interface StandaloneBootstrapDependencies {
   createSimulationWorker(): Worker;
@@ -61,8 +69,9 @@ function createReading(label: string, value: string): HTMLDivElement {
   return item;
 }
 
-function eventLabel(event: AstronomicalEvent): string {
-  return `${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(event.dateIso))} · ${event.title}`;
+function eventLabel(event: AstronomicalEvent, locale: AppLocale): string {
+  const i18n = createI18n(locale);
+  return `${i18n.date(event.dateIso, { dateStyle: 'medium', timeZone: 'UTC' })} · ${i18n.text(event.title)}`;
 }
 
 export async function bootstrapStandalone(
@@ -79,11 +88,17 @@ export async function bootstrapStandalone(
     );
   }
 
-  const ui = mountStandaloneUi(root);
+  let locale = normalizeLocale(config.locale);
+  setDocumentLocale(locale);
+  document.title = `${createI18n(locale).t('app.explorer')} · v${APP_VERSION}`;
+  const ui = mountStandaloneUi(root, locale);
+  const domLocalizer = new DomLocalizer(root, locale);
+  domLocalizer.start();
   const runtime = new SolarSystemRuntime({
     createSimulationWorker: dependencies.createSimulationWorker,
     textureSource: textureSourceResolver(config),
   });
+  runtime.setLocale(locale);
 
   let playing = config.snapshot.playing !== false;
   let destroyed = false;
@@ -106,16 +121,6 @@ export async function bootstrapStandalone(
   let missionUiUpdateTimer: number | undefined;
   let lastPresentationUiUpdateMs = 0;
   let presentationUiUpdateTimer: number | undefined;
-  const simulationDateFormatter = new Intl.DateTimeFormat('en-SG', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  });
   const accuracyRegression = runScientificAccuracyRegression();
 
   const resize = (): void => runtime.resize(viewportFor(ui.scene));
@@ -166,7 +171,6 @@ export async function bootstrapStandalone(
     if (!mission) return;
     mission = { ...mission, cameraMode: mode, followDistance };
     runtime.setMissionCamera(mode, followDistance);
-    runtime.setMission(mission);
     ui.missionCameraSelect.value = mode;
     ui.missionFollowSelect.value = followDistance;
     updateMissionUi();
@@ -189,12 +193,16 @@ export async function bootstrapStandalone(
       followDistance: mission?.followDistance ?? 'standard',
       realism: { ...(mission?.realism ?? DEFAULT_MISSION_REALISM) },
     });
-    ui.setStatus(plan.valid ? `Route planned · Earth to ${plan.destinationName}.` : `Route rejected · ${plan.rejectionReason ?? 'No valid route'}`);
+    ui.setStatus(plan.valid
+      ? (locale === 'zh-CN' ? `航线已规划 · 地球至${createI18n(locale).objectName(plan.destinationId)}。` : `Route planned · Earth to ${plan.destinationName}.`)
+      : `${createI18n(locale).text('Route rejected')} · ${missionRejectionText(plan.rejectionCode, plan.rejectionReason ?? 'No valid route', locale)}`);
   };
   const startMission = (): void => {
     const plan = mission?.plan;
     if (!plan?.valid || !mission) {
-      ui.setStatus(plan?.rejectionReason ?? 'Plan a valid mission first.');
+      ui.setStatus(plan
+        ? missionRejectionText(plan.rejectionCode, plan.rejectionReason ?? 'Plan a valid mission first.', locale)
+        : createI18n(locale).text('Plan a valid mission first.'));
       return;
     }
     mission = { ...mission, active: true };
@@ -204,11 +212,15 @@ export async function bootstrapStandalone(
     setPlaybackRate(Math.max(1 / 24, Math.min(2048, plan.durationDays / 58)));
     setExperience('travel');
     setPlaying(true);
-    ui.setStatus(`Mission started · ${plan.destinationName}.`);
+    ui.setStatus(locale === 'zh-CN'
+      ? `任务已开始 · ${createI18n(locale).objectName(plan.destinationId)}。`
+      : `Mission started · ${plan.destinationName}.`);
     updateMissionUi();
   };
   function updateMissionUi(): void {
     const plan = mission?.plan;
+    const pilotOption = [...ui.missionCameraSelect.options].find((option) => option.value === 'pilot');
+    if (pilotOption) pilotOption.disabled = !(mission?.active && plan?.valid);
     ui.missionSummary.replaceChildren();
     ui.missionDashboard.replaceChildren();
     if (!plan) {
@@ -219,11 +231,14 @@ export async function bootstrapStandalone(
       return;
     }
     const title = document.createElement('strong');
-    title.textContent = plan.valid ? `Earth → ${plan.destinationName} · ${plan.routeKind === 'earth-orbit' ? 'Earth orbit' : 'Hohmann transfer'}` : 'Route rejected';
+    const i18n = createI18n(locale);
+    title.textContent = plan.valid
+      ? `${i18n.objectName('earth')} → ${i18n.objectName(plan.destinationId)} · ${i18n.text(plan.routeKind === 'earth-orbit' ? 'Earth orbit' : 'Hohmann transfer')}`
+      : i18n.text('Route rejected');
     const detail = document.createElement('small');
     detail.textContent = plan.valid
       ? `${plan.durationDays.toFixed(1)} days · ${plan.requiredDeltaVKmS.toFixed(2)} km/s Delta-v · phase residual ${plan.launchPhaseResidualDeg.toFixed(4)}°. Direct and gravity-assist routes are unavailable without dedicated solvers.`
-      : plan.rejectionReason ?? 'No valid route.';
+      : missionRejectionText(plan.rejectionCode, plan.rejectionReason ?? 'No valid route.', locale);
     ui.missionSummary.append(title, detail);
     const state = runtime.getMissionState() ?? missionStateMachine.stateAt(plan, simulationDays);
     const progress = Math.round(state.progress * 1000) / 10;
@@ -233,7 +248,7 @@ export async function bootstrapStandalone(
     fill.style.width = `${progress}%`;
     bar.append(fill);
     ui.missionDashboard.append(
-      createReading('Status', state.status.replaceAll('-', ' ')),
+      createReading('Status', i18n.text(state.status.replaceAll('-', ' '))),
       createReading('Progress', `${progress.toFixed(1)}%`),
       createReading('Remaining', `${state.remainingDays.toFixed(1)} days`),
       createReading('Path left', `${state.remainingDistanceAu.toFixed(3)} AU`),
@@ -250,7 +265,7 @@ export async function bootstrapStandalone(
     events = astronomicalEventEngine.catalogue(simulationDays, ui.focusSelect.value || 'earth');
     ui.eventSelect.replaceChildren(
       ...events.map((event) => {
-        const item = new Option(eventLabel(event), event.id);
+        const item = new Option(eventLabel(event, locale), event.id);
         item.dataset.simulationDays = String(event.simulationDays);
         item.dataset.objectId = event.objectId;
         return item;
@@ -265,7 +280,7 @@ export async function bootstrapStandalone(
     const state = astronomyEngine.bodyState(objectId, simulationDays);
     const phase = astronomyEngine.moonPhase(simulationDays);
     ui.moonPhase.replaceChildren(
-      createReading('Moon phase', phase.phaseName),
+      createReading('Moon phase', createI18n(locale).phaseName(phase.phaseName)),
       createReading('Illuminated', `${(phase.illuminatedFraction * 100).toFixed(1)}%`),
       createReading('Elongation', `${phase.elongationDeg.toFixed(1)}°`),
     );
@@ -273,12 +288,12 @@ export async function bootstrapStandalone(
 
     ui.objectSummary.replaceChildren();
     const objectTitle = document.createElement('strong');
-    objectTitle.textContent = `${facts.name} · ${facts.objectType}`;
+    objectTitle.textContent = `${createI18n(locale).objectName(objectId)} · ${createI18n(locale).text(facts.objectType)}`;
     const objectText = document.createElement('small');
-    objectText.textContent = `${facts.description} Radius ${facts.radiusKm.toLocaleString('en-US')} km · current Sun distance ${state.heliocentricDistanceAu.toFixed(5)} AU.`;
+    objectText.textContent = `${createI18n(locale).text(facts.description)} ${createI18n(locale).text('Radius')} ${createI18n(locale).number(facts.radiusKm, { maximumFractionDigits: 1 })} km · ${createI18n(locale).text('Sun distance now')} ${createI18n(locale).number(state.heliocentricDistanceAu, { maximumFractionDigits: 5 })} AU.`;
     ui.objectSummary.append(objectTitle, objectText);
 
-    const comparison = observerLocationService.compare(objectId, simulationDays, [activeLocation])[0];
+    const comparison = observerLocationService.compare(objectId, simulationDays, [activeLocation], locale)[0];
     ui.observerReading.replaceChildren(
       createReading('Altitude', `${comparison.horizontal.altitudeDeg.toFixed(1)}°`),
       createReading('Azimuth', `${comparison.horizontal.azimuthDeg.toFixed(1)}° ${comparison.horizontal.cardinal}`),
@@ -302,7 +317,16 @@ export async function bootstrapStandalone(
   const renderTimePresentation = (): void => {
     lastPresentationUiUpdateMs = typeof performance === 'undefined' ? Date.now() : performance.now();
     const date = simulationDaysToDate(simulationDays);
-    ui.simulationDate.textContent = simulationDateFormatter.format(date);
+    ui.simulationDate.textContent = createI18n(locale).date(date, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'UTC',
+    });
     ui.simulationUtc.textContent = `UTC · ${date.toISOString()}`;
     ui.timelineInput.value = String(Math.max(-36525, Math.min(36525, simulationDays)));
     if (document.activeElement !== ui.dateInput) ui.dateInput.value = simulationDaysToLocalInput(simulationDays);
@@ -418,10 +442,26 @@ export async function bootstrapStandalone(
     refreshEventOptions();
     updateTimeUi(0);
   };
-  const handleFocus = (): void => runtime.focusObject(ui.focusSelect.value);
+  const handleFocus = (): void => runtime.trackObject(ui.focusSelect.value);
   const handleQuality = (): void => setQuality(ui.qualitySelect.value as 'low' | 'auto' | 'high');
   const handleScale = (): void => setScaleMode(ui.scaleSelect.value as 'learning' | 'real-distance' | 'real-scale');
   const handleExperience = (): void => setExperience(ui.experienceSelect.value === 'travel' ? 'travel' : ui.experienceSelect.value === 'learn' ? 'learn' : 'explore');
+  const setLocale = (nextLocale: AppLocale): void => {
+    locale = normalizeLocale(nextLocale);
+    ui.localeSelect.value = locale;
+    setDocumentLocale(locale);
+    document.title = `${createI18n(locale).t('app.explorer')} · v${APP_VERSION}`;
+    runtime.setLocale(locale);
+    refreshEventOptions();
+    updateMissionUi();
+    updateScienceUi();
+    renderTimePresentation();
+    setPlaybackRate(direction * playbackMagnitude);
+    setPlaying(playing);
+    domLocalizer.setLocale(locale);
+    domLocalizer.refresh();
+  };
+  const handleLocale = (): void => setLocale(normalizeLocale(ui.localeSelect.value));
   const handleDirection = (): void => setPlaybackRate(direction === 1 ? -playbackMagnitude : playbackMagnitude);
   const handleTimeline = (): void => runtime.setSimulationTime(Number(ui.timelineInput.value));
   const handleDateApply = (): void => {
@@ -439,7 +479,7 @@ export async function bootstrapStandalone(
     if (!event) return;
     selectedEvent = event;
     runtime.setSimulationTime(event.simulationDays);
-    runtime.focusObject(event.objectId);
+    runtime.trackObject(event.objectId);
     ui.setStatus(`Jumped to ${event.title}.`);
   };
   const handleMissionDestination = (): void => {
@@ -447,7 +487,12 @@ export async function bootstrapStandalone(
     planMission();
   };
   const handleMissionType = (): void => planMission();
-  const handleMissionCamera = (): void => setMissionCamera(ui.missionCameraSelect.value === 'free' ? 'free' : 'follow', ui.missionFollowSelect.value as MissionFollowDistance);
+  const handleMissionCamera = (): void => {
+    const value = ui.missionCameraSelect.value;
+    const mode: MissionCameraMode = value === 'pilot' ? 'pilot' : value === 'free' ? 'free' : 'follow';
+    setMissionCamera(mode, ui.missionFollowSelect.value as MissionFollowDistance);
+    if (mode === 'pilot') ui.close();
+  };
   const handleMissionFollow = (): void => setMissionCamera('follow', ui.missionFollowSelect.value as MissionFollowDistance);
   const handleObserver = (): void => {
     activeLocation = observerLocationService.list().find((location) => location.id === ui.observerSelect.value) ?? activeLocation;
@@ -461,6 +506,7 @@ export async function bootstrapStandalone(
   ui.qualitySelect.addEventListener('change', handleQuality);
   ui.scaleSelect.addEventListener('change', handleScale);
   ui.experienceSelect.addEventListener('change', handleExperience);
+  ui.localeSelect.addEventListener('change', handleLocale);
   ui.directionButton.addEventListener('click', handleDirection);
   ui.timelineInput.addEventListener('input', handleTimeline);
   ui.dateApplyButton.addEventListener('click', handleDateApply);
@@ -497,6 +543,7 @@ export async function bootstrapStandalone(
     ui.qualitySelect.removeEventListener('change', handleQuality);
     ui.scaleSelect.removeEventListener('change', handleScale);
     ui.experienceSelect.removeEventListener('change', handleExperience);
+    ui.localeSelect.removeEventListener('change', handleLocale);
     ui.directionButton.removeEventListener('click', handleDirection);
     ui.timelineInput.removeEventListener('input', handleTimeline);
     ui.dateApplyButton.removeEventListener('click', handleDateApply);
@@ -509,6 +556,7 @@ export async function bootstrapStandalone(
     ui.missionFollowSelect.removeEventListener('change', handleMissionFollow);
     ui.observerSelect.removeEventListener('change', handleObserver);
     runtime.destroy();
+    domLocalizer.destroy();
     ui.destroy();
     delete window[STANDALONE_API_KEY];
   };
@@ -519,9 +567,19 @@ export async function bootstrapStandalone(
       ui.focusSelect.value = id;
       runtime.focusObject(id);
     },
+    track(id: string): void {
+      ui.focusSelect.value = id;
+      runtime.trackObject(id);
+    },
+    inspect(id: string): void {
+      ui.focusSelect.value = id;
+      runtime.inspectObject(id);
+    },
     setQuality,
     setScaleMode,
     setExperience,
+    setLocale,
+    getLocale: () => locale,
     setMission,
     setMissionCamera,
     setSimulationTime(days: number): void {
@@ -549,7 +607,7 @@ export async function bootstrapStandalone(
       };
       snapshot.simulationDays = simulationDays;
       snapshot.experience = experience;
-      snapshot.mission = mission;
+      snapshot.mission = snapshot.mission ?? mission;
       snapshot.observer = {
         location: { ...activeLocation },
         atmosphere,

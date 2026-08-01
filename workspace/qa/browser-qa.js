@@ -39,6 +39,13 @@ const approx = (actual, expected, tolerance, message) => {
     throw new Error(message + ': expected ' + expected + ' ± ' + tolerance + ', got ' + actual);
   }
 };
+const relativeCamera = (snapshot) => {
+  const position = snapshot?.camera?.position;
+  const target = snapshot?.camera?.target;
+  if (!position || !target) throw new Error('Runtime snapshot omitted camera state.');
+  return position.map((value, index) => value - target[index]);
+};
+const vectorDistance = (left, right) => Math.hypot(...left.map((value, index) => value - right[index]));
 const dispatchClick = async (page, selector) => {
   await page.dispatchEvent(selector, 'click');
 };
@@ -470,6 +477,143 @@ async function runDesktopInteractions(browserName, browser) {
     window.__SCIENCE_QA__?.setQuality('low');
     window.__SCIENCE_QA__?.setPlaying(false);
   });
+
+  markProgress('interactions:pointer-track-regression');
+  await dispatchClick(page, '[data-view-control="reframe"]');
+  await page.waitForFunction(() => window.__SCIENCE_QA__?.getRuntimeSnapshot().viewMode === 'overview');
+  const earthPoint = await page.evaluate(() => {
+    const diagnostics = window.__SCIENCE_QA__?.getVisualDiagnostics();
+    const earth = diagnostics?.objects.find((object) => object.id === 'earth');
+    const canvas = document.querySelector('#runtime-viewport canvas');
+    if (!earth || !(canvas instanceof HTMLCanvasElement)) return undefined;
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: bounds.left + (earth.ndcX * 0.5 + 0.5) * bounds.width,
+      y: bounds.top + (-earth.ndcY * 0.5 + 0.5) * bounds.height,
+    };
+  });
+  assert(earthPoint, browserName + ': Earth screen position was unavailable for pointer Track QA.');
+  await page.mouse.click(earthPoint.x, earthPoint.y);
+  await page.waitForFunction(() => {
+    const snapshot = window.__SCIENCE_QA__?.getRuntimeSnapshot();
+    return snapshot?.focusedObject === 'earth' && snapshot.viewMode === 'track';
+  });
+  await page.evaluate(() => window.__SCIENCE_QA__?.setQuality('high'));
+  for (let index = 0; index < 6; index += 1) await dispatchClick(page, '[data-view-control="zoom-in"]');
+  await page.waitForTimeout(1_200);
+  const focusedDiagnostics = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  assert(!focusedDiagnostics?.focusDecorationsHidden, browserName + ': Track incorrectly hid environmental context.');
+  assert((focusedDiagnostics?.asteroidSpriteCount ?? 0) > 0, browserName + ': Track hid the asteroid belt.');
+  assert(focusedDiagnostics?.cameraNear > 0, browserName + ': focused camera near plane is invalid.');
+  assert(focusedDiagnostics?.cameraFar > focusedDiagnostics?.cameraNear, browserName + ': focused camera far plane is invalid.');
+  assert(
+    Number(focusedDiagnostics?.cameraDepthRatio) < 100_000,
+    browserName + ': Track camera depth ratio regressed toward the former billion-scale range: ' + focusedDiagnostics?.cameraDepthRatio,
+  );
+
+  const focusedCanvas = await page.locator('#runtime-viewport canvas').boundingBox();
+  assert(focusedCanvas, browserName + ': focused canvas bounds unavailable.');
+  const center = { x: focusedCanvas.x + focusedCanvas.width / 2, y: focusedCanvas.y + focusedCanvas.height / 2 };
+  const canonicalSnapshot = await page.evaluate(() => window.__SCIENCE_QA__?.getRuntimeSnapshot());
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 120, center.y + 42, { steps: 10 });
+  await page.mouse.move(center.x + 28, center.y + 8, { steps: 5 });
+  const beforeRelease = await page.evaluate(() => window.__SCIENCE_QA__?.getRuntimeSnapshot());
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+  const afterRelease = await page.evaluate(() => window.__SCIENCE_QA__?.getRuntimeSnapshot());
+  const canonicalVector = relativeCamera(canonicalSnapshot);
+  const beforeReleaseVector = relativeCamera(beforeRelease);
+  const afterReleaseVector = relativeCamera(afterRelease);
+  assert(
+    vectorDistance(canonicalVector, beforeReleaseVector) > Math.hypot(...canonicalVector) * 0.03,
+    browserName + ': orbit drag did not materially move the tracked camera.',
+  );
+  assert(
+    vectorDistance(canonicalVector, afterReleaseVector) > Math.hypot(...canonicalVector) * 0.02,
+    browserName + ': releasing a drag over Earth reset the Track camera.',
+  );
+  approx(
+    Math.hypot(...afterReleaseVector),
+    Math.hypot(...beforeReleaseVector),
+    Math.hypot(...beforeReleaseVector) * 0.01,
+    browserName + ': orbit drag changed focused camera distance',
+  );
+
+  // Let any asynchronous texture work settle before testing orbital tracking.
+  await page.waitForTimeout(3_000);
+  const trackedBefore = await page.evaluate(() => window.__SCIENCE_QA__?.getRuntimeSnapshot());
+  const planetResourcesBefore = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter((entry) => entry.name.includes('/assets/planets/')).length);
+  await page.evaluate(() => {
+    window.__SCIENCE_QA__?.setPlaybackRate(1);
+    window.__SCIENCE_QA__?.setPlaying(true);
+  });
+  if (captureScreenshots && browserName === 'chromium') {
+    await page.screenshot({ path: join(evidenceDir, 'earth-focused-playing-stable.png') });
+  }
+  await page.waitForTimeout(browserName === 'chromium' ? 5_000 : 1_200);
+  await page.evaluate(() => window.__SCIENCE_QA__?.setPlaying(false));
+  await page.waitForTimeout(150);
+  const trackedAfter = await page.evaluate(() => window.__SCIENCE_QA__?.getRuntimeSnapshot());
+  const trackedBeforeVector = relativeCamera(trackedBefore);
+  const trackedAfterVector = relativeCamera(trackedAfter);
+  assert(
+    vectorDistance(trackedBeforeVector, trackedAfterVector) < Math.hypot(...trackedBeforeVector) * 0.005,
+    browserName + ': tracked planet playback changed the user-selected camera orbit: '
+      + JSON.stringify({ trackedBeforeVector, trackedAfterVector, delta: vectorDistance(trackedBeforeVector, trackedAfterVector), distance: Math.hypot(...trackedBeforeVector) }),
+  );
+  assert(
+    vectorDistance(trackedBefore.camera.target, trackedAfter.camera.target) > 0.00001,
+    browserName + ': Track camera target did not follow Earth during playback.',
+  );
+  const planetResourcesAfter = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter((entry) => entry.name.includes('/assets/planets/')).length);
+  assert(planetResourcesAfter === planetResourcesBefore, browserName + ': playback requested planet textures again.');
+  if (captureScreenshots && browserName === 'chromium') {
+    await page.screenshot({ path: join(evidenceDir, 'earth-focused-paused-stable.png') });
+  }
+
+  await page.evaluate(() => window.__SCIENCE_QA__?.inspectObject('earth'));
+  await page.waitForFunction(() => window.__SCIENCE_QA__?.getRuntimeSnapshot().viewMode === 'inspect');
+  const inspectedDiagnostics = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  assert(inspectedDiagnostics?.focusDecorationsHidden, browserName + ': Inspect did not isolate the selected planet.');
+  assert(inspectedDiagnostics?.cameraDepthRatio < 4, browserName + ': Inspect camera depth ratio remains unstable.');
+
+  await dispatchClick(page, '[data-view-control="reframe"]');
+  await page.waitForFunction(() => window.__SCIENCE_QA__?.getRuntimeSnapshot().viewMode === 'overview');
+  const cancelPoint = await page.evaluate(() => {
+    const diagnostics = window.__SCIENCE_QA__?.getVisualDiagnostics();
+    const earth = diagnostics?.objects.find((object) => object.id === 'earth');
+    const canvas = document.querySelector('#runtime-viewport canvas');
+    if (!earth || !(canvas instanceof HTMLCanvasElement)) return undefined;
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: bounds.left + (earth.ndcX * 0.5 + 0.5) * bounds.width,
+      y: bounds.top + (-earth.ndcY * 0.5 + 0.5) * bounds.height,
+    };
+  });
+  assert(cancelPoint, browserName + ': pointer-cancel target unavailable.');
+  await page.evaluate(() => {
+    const canvas = document.querySelector('#runtime-viewport canvas');
+    canvas?.addEventListener('pointerdown', (event) => {
+      document.documentElement.dataset.qaActivePointerId = String(event.pointerId);
+    }, { capture: true, once: true });
+  });
+  await page.mouse.move(cancelPoint.x, cancelPoint.y);
+  await page.mouse.down();
+  await page.evaluate(({ x, y }) => {
+    const canvas = document.querySelector('#runtime-viewport canvas');
+    const pointerId = Number(document.documentElement.dataset.qaActivePointerId);
+    canvas?.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId, pointerType: 'mouse', isPrimary: true, button: 0, clientX: x, clientY: y }));
+  }, cancelPoint);
+  await page.mouse.up();
+  assert(
+    (await page.evaluate(() => window.__SCIENCE_QA__?.getRuntimeSnapshot().focusedObject)) === 'sun',
+    browserName + ': pointercancel incorrectly focused a planet.',
+  );
+
   await page.locator('#toggle-inspector-panel').click();
   assert(
     (await page.locator('#toggle-inspector-panel').getAttribute('aria-expanded')) === 'true',
@@ -786,8 +930,25 @@ async function verifyCanvasFallback(browser) {
   await page.locator('#toggle-inspector-panel').click();
   assert((await page.locator('canvas.canvas-fallback').getAttribute('aria-label'))?.includes('Earth Moon'), 'Canvas fallback Moon support missing.');
   await selectOptionStable(page, '#focus-select', 'moon', 'Canvas Moon focus');
-  await page.waitForFunction(() => /Focused on Moon.*Canvas 2D mode/i.test(document.querySelector('#status-message')?.textContent ?? ''));
+  await page.waitForFunction(() => /Tracking Moon.*Canvas 2D mode/i.test(document.querySelector('#status-message')?.textContent ?? ''));
   for (const value of ['low', 'auto', 'high', 'low']) await page.locator('.inspector-panel [data-parameter="quality"]').selectOption(value);
+  await selectOptionStable(page, '#focus-select', 'earth', 'Canvas Earth drag regression');
+  const canvasBounds = await page.locator('canvas.canvas-fallback').boundingBox();
+  assert(canvasBounds, 'Canvas fallback bounds unavailable for drag regression.');
+  const canvasCenter = { x: canvasBounds.x + canvasBounds.width / 2, y: canvasBounds.y + canvasBounds.height / 2 };
+  await page.mouse.move(canvasCenter.x, canvasCenter.y);
+  await page.mouse.down();
+  await page.mouse.move(canvasCenter.x + 100, canvasCenter.y + 30, { steps: 8 });
+  await page.mouse.move(canvasCenter.x + 25, canvasCenter.y + 5, { steps: 4 });
+  const canvasBeforeRelease = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  await page.mouse.up();
+  const canvasAfterRelease = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  assert(
+    Math.hypot(canvasBeforeRelease?.manualOffsetX ?? 0, canvasBeforeRelease?.manualOffsetY ?? 0) > 4,
+    'Canvas fallback drag did not move the view.',
+  );
+  approx(canvasAfterRelease?.manualOffsetX, canvasBeforeRelease?.manualOffsetX, 0.01, 'Canvas drag release reset horizontal offset');
+  approx(canvasAfterRelease?.manualOffsetY, canvasBeforeRelease?.manualOffsetY, 0.01, 'Canvas drag release reset vertical offset');
   const fallbackScale = page.locator('.inspector-panel [data-parameter=scaleMode]');
   for (const value of ['real-distance', 'real-scale', 'learning', 'real-distance']) await fallbackScale.selectOption(value);
   // Always invoked with browserName === 'chromium' (see call site); browserName is not in

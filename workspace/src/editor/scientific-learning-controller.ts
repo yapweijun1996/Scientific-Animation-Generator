@@ -16,6 +16,7 @@ import type {
   ObserverLocation,
 } from '../astronomy/types';
 import { FOCUSABLE_OBJECTS, isPlanetId } from '../templates/solar-system/celestial-catalog';
+import { createI18n, type AppLocale } from '../i18n';
 
 interface ScientificLearningControllerOptions {
   root: HTMLElement;
@@ -53,8 +54,8 @@ function formatNumber(value: number, digits = 2): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(value);
 }
 
-function formatEventTime(event: AstronomicalEvent, timeZone = 'UTC'): string {
-  return new Intl.DateTimeFormat('en-US', {
+function formatEventTime(event: AstronomicalEvent, locale: AppLocale, timeZone = 'UTC'): string {
+  return new Intl.DateTimeFormat(locale === 'zh-CN' ? 'zh-CN' : 'en-US', {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone,
@@ -70,6 +71,7 @@ function accuracyBadge(simulationDays: number): string {
 }
 
 export class ScientificLearningController {
+  private locale: AppLocale = 'en';
   private experience: ExperienceMode = isExperienceMode(localStorage.getItem(EXPERIENCE_KEY))
     ? (localStorage.getItem(EXPERIENCE_KEY) as ExperienceMode)
     : 'explore';
@@ -112,6 +114,11 @@ export class ScientificLearningController {
     this.options.root.removeEventListener('click', this.handleClickBound);
     this.options.root.removeEventListener('change', this.handleChangeBound);
     this.options.root.removeEventListener('submit', this.handleSubmitBound);
+  }
+
+  setLocale(locale: AppLocale): void {
+    this.locale = locale;
+    this.renderAll();
   }
 
   updateTime(simulationDays: number): void {
@@ -222,6 +229,7 @@ export class ScientificLearningController {
   }
 
   private renderObjectInformation(): void {
+    const i18n = createI18n(this.locale);
     const facts = objectFacts(this.focusedObject);
     const state = astronomyEngine.bodyState(this.focusedObject, this.simulationDays);
     const phase = this.focusedObject === 'moon' ? astronomyEngine.moonPhase(this.simulationDays) : undefined;
@@ -229,31 +237,31 @@ export class ScientificLearningController {
     const content = `
       <article class="object-science-card" data-object-card="${facts.id}">
         <div class="object-card-heading">
-          <div><span class="eyebrow">${escapeHtml(facts.objectType)}</span><h3>${escapeHtml(facts.name)}</h3></div>
+          <div><span class="eyebrow">${escapeHtml(i18n.text(facts.objectType))}</span><h3>${escapeHtml(i18n.objectName(facts.id))}</h3></div>
           <span class="accuracy-chip">${accuracyBadge(this.simulationDays)}</span>
         </div>
-        <p class="object-summary">${escapeHtml(facts.description)}</p>
-        ${isPlanetId(facts.id) ? `<button type="button" class="object-mission-button" data-plan-mission="${facts.id}">Plan mission to ${escapeHtml(facts.name)}</button>` : ''}
+        <p class="object-summary">${escapeHtml(i18n.text(facts.description))}</p>
+        ${isPlanetId(facts.id) ? `<button type="button" class="object-mission-button" data-plan-mission="${facts.id}">${this.locale === 'zh-CN' ? `规划前往${escapeHtml(i18n.objectName(facts.id))}的任务` : `Plan mission to ${escapeHtml(facts.name)}`}</button>` : ''}
         <div class="science-stat-grid">
-          <div><span>Radius</span><strong>${formatNumber(facts.radiusKm, 1)} km</strong></div>
+          <div><span>Radius</span><strong>${createI18n(this.locale).number(facts.radiusKm, { maximumFractionDigits: 1 })} km</strong></div>
           <div><span>Mass</span><strong>${formatScientificMass(facts.massKg)}</strong></div>
-          ${facts.surfaceGravityMs2 === undefined ? '' : `<div><span>Surface gravity</span><strong>${formatNumber(facts.surfaceGravityMs2, 3)} m/s²</strong></div>`}
-          <div><span>Rotation</span><strong>${escapeHtml(facts.rotationPeriod)}</strong></div>
-          <div><span>Orbit</span><strong>${escapeHtml(facts.orbitalPeriod)}</strong></div>
-          <div><span>Sun distance now</span><strong>${formatNumber(state.heliocentricDistanceAu, 5)} AU</strong></div>
-          ${phase ? `<div><span>Illumination</span><strong>${formatNumber(phase.illuminatedFraction * 100, 1)}%</strong></div><div><span>Phase</span><strong>${phase.phaseName}</strong></div>` : ''}
+          ${facts.surfaceGravityMs2 === undefined ? '' : `<div><span>Surface gravity</span><strong>${createI18n(this.locale).number(facts.surfaceGravityMs2, { maximumFractionDigits: 3 })} m/s²</strong></div>`}
+          <div><span>Rotation</span><strong>${escapeHtml(i18n.text(facts.rotationPeriod))}</strong></div>
+          <div><span>Orbit</span><strong>${escapeHtml(i18n.text(facts.orbitalPeriod))}</strong></div>
+          <div><span>Sun distance now</span><strong>${createI18n(this.locale).number(state.heliocentricDistanceAu, { maximumFractionDigits: 5 })} AU</strong></div>
+          ${phase ? `<div><span>Illumination</span><strong>${createI18n(this.locale).number(phase.illuminatedFraction * 100, { maximumFractionDigits: 1 })}%</strong></div><div><span>Phase</span><strong>${createI18n(this.locale).phaseName(phase.phaseName)}</strong></div>` : ''}
         </div>
         ${advanced ? `
           <details class="science-details" open>
             <summary>Advanced information</summary>
             <div class="science-detail-list">
-              <div><span>Axial tilt</span><b>${formatNumber(facts.axialTiltDeg, 3)}°</b></div>
-              <div><span>Atmosphere</span><b>${escapeHtml(facts.atmosphere)}</b></div>
+              <div><span>Axial tilt</span><b>${createI18n(this.locale).number(facts.axialTiltDeg, { maximumFractionDigits: 3 })}°</b></div>
+              <div><span>Atmosphere</span><b>${escapeHtml(i18n.text(facts.atmosphere))}</b></div>
               ${facts.perihelionAu === undefined ? '' : `<div><span>Perihelion / aphelion</span><b>${facts.perihelionAu.toFixed(4)} / ${facts.aphelionAu?.toFixed(4)} AU</b></div>`}
               <div><span>Ecliptic lon / lat</span><b>${state.eclipticLongitudeDeg.toFixed(3)}° / ${state.eclipticLatitudeDeg.toFixed(3)}°</b></div>
               <div><span>RA / Dec</span><b>${state.rightAscensionDeg.toFixed(3)}° / ${state.declinationDeg.toFixed(3)}°</b></div>
-              <div><span>Exploration</span><b>${escapeHtml(facts.exploration)}</b></div>
-              <div><span>Source note</span><b>${escapeHtml(facts.sourceNote)}</b></div>
+              <div><span>Exploration</span><b>${escapeHtml(i18n.text(facts.exploration))}</b></div>
+              <div><span>Source note</span><b>${escapeHtml(i18n.text(facts.sourceNote))}</b></div>
             </div>
           </details>` : ''}
       </article>`;
@@ -265,30 +273,43 @@ export class ScientificLearningController {
   private renderLearningModule(): void {
     const root = this.options.root.querySelector<HTMLElement>('#learning-module-root');
     if (!root) return;
+    const i18n = createI18n(this.locale);
     const module = learningModule(this.activeModuleId);
     const step = module.steps[Math.min(this.activeStep, module.steps.length - 1)];
     root.innerHTML = `
-      <div class="learning-module-picker">
-        ${LEARNING_MODULES.map((item) => `<button type="button" data-learning-module="${item.id}" class="${item.id === module.id ? 'is-active' : ''}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.subtitle)}</small></button>`).join('')}
+      <div class="learning-module-picker" aria-label="${this.locale === 'zh-CN' ? '学习主题' : 'Learning topics'}">
+        ${LEARNING_MODULES.map((item) => `<button type="button" data-learning-module="${item.id}" aria-pressed="${item.id === module.id}" class="${item.id === module.id ? 'is-active' : ''}"><strong>${escapeHtml(i18n.text(item.title))}</strong><small>${escapeHtml(i18n.text(item.subtitle))}</small></button>`).join('')}
       </div>
       <article class="learning-stage-card">
         <div class="learning-stage-header">
-          <div><span class="eyebrow">Guided observation</span><h3>${escapeHtml(module.title)}</h3></div>
-          <span>${this.activeStep + 1} / ${module.steps.length}</span>
+          <div><span class="eyebrow">${escapeHtml(i18n.text('Guided observation'))}</span><h3>${escapeHtml(i18n.text(module.title))}</h3></div>
+          <span class="learning-step-count" aria-label="${this.locale === 'zh-CN' ? `第 ${this.activeStep + 1} 步，共 ${module.steps.length} 步` : `Step ${this.activeStep + 1} of ${module.steps.length}`}">${this.activeStep + 1} / ${module.steps.length}</span>
         </div>
-        <p>${escapeHtml(module.summary)}</p>
-        <div class="lesson-progress" aria-label="Lesson progress">${module.steps.map((_, index) => `<i class="${index <= this.activeStep ? 'is-complete' : ''}"></i>`).join('')}</div>
-        <div class="lesson-step">
-          <span class="eyebrow">Current observation</span>
-          <strong>${escapeHtml(step.title)}</strong>
-          <p>${escapeHtml(this.complexity === 'advanced' ? step.advanced : step.basic)}</p>
+        <p class="learning-stage-summary">${escapeHtml(i18n.text(module.summary))}</p>
+        <div class="lesson-progress" aria-label="${escapeHtml(i18n.text('Lesson progress'))}">${module.steps.map((_, index) => `<i class="${index <= this.activeStep ? 'is-complete' : ''}"></i>`).join('')}</div>
+        <div class="lesson-step" aria-live="polite">
+          <span class="eyebrow">${escapeHtml(i18n.text('Current observation'))}</span>
+          <strong>${escapeHtml(i18n.text(step.title))}</strong>
+          <p class="lesson-step-copy">${escapeHtml(i18n.text(this.complexity === 'advanced' ? step.advanced : step.basic))}</p>
         </div>
         <div class="lesson-actions">
-          <button type="button" data-lesson-action="previous" ${this.activeStep === 0 ? 'disabled' : ''}>Previous</button>
-          <button type="button" data-lesson-focus="${step.focusObject}">Focus ${escapeHtml(objectName(step.focusObject))}</button>
-          <button type="button" class="control-primary" data-lesson-action="next" ${this.activeStep >= module.steps.length - 1 ? 'disabled' : ''}>Next</button>
+          <button type="button" data-lesson-action="previous" ${this.activeStep === 0 ? 'disabled' : ''}>${escapeHtml(i18n.text('Previous'))}</button>
+          <button type="button" data-lesson-focus="${step.focusObject}">${this.locale === 'zh-CN' ? `检视${escapeHtml(i18n.objectName(step.focusObject))}` : `Focus ${escapeHtml(objectName(step.focusObject))}`}</button>
+          <button type="button" class="control-primary" data-lesson-action="next" ${this.activeStep >= module.steps.length - 1 ? 'disabled' : ''}>${escapeHtml(i18n.text('Next'))}</button>
         </div>
       </article>`;
+    requestAnimationFrame(() => {
+      const picker = root.querySelector<HTMLElement>('.learning-module-picker');
+      const active = picker?.querySelector<HTMLElement>('[data-learning-module].is-active');
+      if (!picker || !active || picker.scrollWidth <= picker.clientWidth) return;
+      const left = active.offsetLeft;
+      const right = left + active.offsetWidth;
+      const visibleLeft = picker.scrollLeft;
+      const visibleRight = visibleLeft + picker.clientWidth;
+      if (left >= visibleLeft && right <= visibleRight) return;
+      const target = Math.max(0, Math.min(left - 2, picker.scrollWidth - picker.clientWidth));
+      picker.scrollTo({ left: target, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    });
   }
 
   private renderMoonPhaseSummary(): void {
@@ -298,8 +319,8 @@ export class ScientificLearningController {
     const lit = Math.round(phase.illuminatedFraction * 100);
     root.innerHTML = `
       <article class="moon-phase-card">
-        <div class="moon-phase-visual" style="--phase-lit:${lit}%" aria-label="${phase.phaseName}, ${lit}% illuminated"><i></i></div>
-        <div><span class="eyebrow">Live Moon geometry</span><strong>${phase.phaseName}</strong><p>${lit}% illuminated · elongation ${phase.elongationDeg.toFixed(1)}°</p></div>
+        <div class="moon-phase-visual" style="--phase-lit:${lit}%" aria-label="${createI18n(this.locale).phaseName(phase.phaseName)}, ${lit}% illuminated"><i></i></div>
+        <div><span class="eyebrow">Live Moon geometry</span><strong>${createI18n(this.locale).phaseName(phase.phaseName)}</strong><p>${this.locale === 'zh-CN' ? `照明比例 ${lit}% · 伸距 ${phase.elongationDeg.toFixed(1)}°` : `${lit}% illuminated · elongation ${phase.elongationDeg.toFixed(1)}°`}</p></div>
       </article>`;
   }
 
@@ -311,7 +332,7 @@ export class ScientificLearningController {
     const eventRows = this.eventCatalogue.slice(0, 12).map((event) => `
       <button type="button" class="event-row ${this.selectedEvent?.id === event.id ? 'is-selected' : ''}" data-event-id="${event.id}" data-event-days="${event.simulationDays}">
         <span class="event-type-icon" aria-hidden="true">${event.type.includes('moon') ? '◐' : event.type.includes('eclipse') ? '◉' : event.type.includes('opposition') ? '↔' : '◇'}</span>
-        <span><strong>${escapeHtml(event.title)}</strong><small>${formatEventTime(event)}</small></span>
+        <span><strong>${escapeHtml(createI18n(this.locale).text(event.title))}</strong><small>${formatEventTime(event, this.locale)}</small></span>
         <em>${event.accuracy}</em>
       </button>`).join('');
     this.options.root.querySelectorAll<HTMLElement>('[data-event-catalogue-root]').forEach((root) => {
@@ -351,13 +372,14 @@ export class ScientificLearningController {
   private renderObserverSky(): void {
     const roots = this.options.root.querySelectorAll<HTMLElement>('[data-observer-sky-root]');
     if (!roots.length) return;
-    const comparisons = observerLocationService.compare(this.focusedObject, this.simulationDays);
+    const comparisons = observerLocationService.compare(this.focusedObject, this.simulationDays, undefined, this.locale);
     const active = comparisons.find((comparison) => comparison.location.id === this.activeLocation.id) ?? comparisons[0];
     const html = this.observerSkyMarkup(active, comparisons);
     roots.forEach((root) => { root.innerHTML = html; });
   }
 
   private observerSkyMarkup(active: EventLocationComparison, comparisons: EventLocationComparison[]): string {
+    const i18n = createI18n(this.locale);
     const { altitudeDeg, azimuthDeg, visibleAboveHorizon, cardinal } = active.horizontal;
     const altitudeRadius = Math.max(0, Math.min(1, (90 - Math.max(0, altitudeDeg)) / 90));
     const angle = (azimuthDeg - 90) * (Math.PI / 180);
@@ -372,9 +394,9 @@ export class ScientificLearningController {
       <tr class="${comparison.location.id === active.location.id ? 'is-active' : ''}"><td>${escapeHtml(comparison.location.name)}</td><td>${comparison.horizontal.altitudeDeg.toFixed(1)}°</td><td>${comparison.horizontal.azimuthDeg.toFixed(1)}° ${comparison.horizontal.cardinal}</td><td>${comparison.horizontal.visibleAboveHorizon ? 'Above horizon' : 'Below horizon'}</td><td>${escapeHtml(comparison.localTimeLabel)}</td></tr>`).join('');
     return `
       <article class="control-card ground-observer-card">
-        <div class="card-heading"><div><span class="eyebrow">Ground Observer View</span><h3>${escapeHtml(objectName(this.focusedObject))} from ${escapeHtml(active.location.name)}</h3></div><span class="visibility-chip ${visibleAboveHorizon ? 'is-visible' : ''}">${visibleAboveHorizon ? 'Visible' : 'Below horizon'}</span></div>
+        <div class="card-heading"><div><span class="eyebrow">Ground Observer View</span><h3>${escapeHtml(i18n.objectName(this.focusedObject))}${this.locale === 'zh-CN' ? '（观测地点：' : ' from '}${escapeHtml(active.location.name)}${this.locale === 'zh-CN' ? '）' : ''}</h3></div><span class="visibility-chip ${visibleAboveHorizon ? 'is-visible' : ''}">${visibleAboveHorizon ? 'Visible' : 'Below horizon'}</span></div>
         <div class="ground-sky ${skyClass}">
-          <svg viewBox="0 0 200 200" role="img" aria-label="Sky map showing ${escapeHtml(objectName(this.focusedObject))} at altitude ${altitudeDeg.toFixed(1)} degrees and azimuth ${azimuthDeg.toFixed(1)} degrees">
+          <svg viewBox="0 0 200 200" role="img" aria-label="${this.locale === 'zh-CN' ? `天空图：${escapeHtml(i18n.objectName(this.focusedObject))}的高度角为 ${altitudeDeg.toFixed(1)}°，方位角为 ${azimuthDeg.toFixed(1)}°` : `Sky map showing ${escapeHtml(objectName(this.focusedObject))} at altitude ${altitudeDeg.toFixed(1)} degrees and azimuth ${azimuthDeg.toFixed(1)} degrees`}">
             <circle class="sky-dome" cx="100" cy="100" r="82" />
             <circle class="sky-altitude" cx="100" cy="100" r="55" />
             <circle class="sky-altitude" cx="100" cy="100" r="28" />
@@ -586,12 +608,12 @@ export class ScientificLearningController {
   }
 
   private downloadAccuracyReport(): void {
-    const markdown = scientificAccuracyReportMarkdown();
+    const markdown = scientificAccuracyReportMarkdown(undefined, this.locale);
     const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'solar-system-v0.6-scientific-accuracy-report.md';
+    anchor.download = `solar-system-v0.6-scientific-accuracy-report${this.locale === 'zh-CN' ? '-zh-CN' : ''}.md`;
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
     this.options.setStatus('Scientific Accuracy Report downloaded');

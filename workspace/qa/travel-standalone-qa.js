@@ -170,6 +170,41 @@ async function run() {
     );
   }
 
+  await selectValue(page, '#standalone-mission-camera', 'pilot');
+  await page.waitForFunction(() => !(document.querySelector('.standalone-panel') instanceof HTMLDialogElement)
+    || !document.querySelector('.standalone-panel').open);
+  await page.evaluate(() => window.__SCIENCE_STANDALONE_RUNTIME__?.pause());
+  const pilotBefore = await page.evaluate(() => ({
+    progress: window.__SCIENCE_STANDALONE_RUNTIME__?.getMissionState()?.progress,
+    offset: window.__SCIENCE_STANDALONE_RUNTIME__?.getSnapshot().mission?.pilot?.offset ?? [0, 0, 0],
+  }));
+  await page.keyboard.down('KeyW');
+  await sleep(420);
+  await page.keyboard.up('KeyW');
+  await sleep(100);
+  const pilotAfter = await page.evaluate(() => ({
+    mission: window.__SCIENCE_STANDALONE_RUNTIME__?.getSnapshot().mission,
+    progress: window.__SCIENCE_STANDALONE_RUNTIME__?.getMissionState()?.progress,
+    hudVisible: document.querySelector('.assisted-pilot-hud') instanceof HTMLElement
+      && !document.querySelector('.assisted-pilot-hud')?.hasAttribute('hidden'),
+    touchTargetCount: document.querySelectorAll('.pilot-actions button').length,
+    minimumTouchTarget: Math.min(...[...document.querySelectorAll('.pilot-actions button')]
+      .map((element) => element.getBoundingClientRect().height)),
+  }));
+  assert(pilotAfter.mission?.cameraMode === 'pilot', 'Standalone Pilot camera was not applied: ' + JSON.stringify(pilotAfter));
+  assert(pilotAfter.hudVisible, 'Standalone Pilot HUD is hidden during an active mission.');
+  assert(pilotAfter.touchTargetCount >= 5, 'Standalone Pilot touch controls are missing.');
+  assert(pilotAfter.minimumTouchTarget >= 44, 'Standalone Pilot touch controls are smaller than 44 px.');
+  assert(
+    Math.hypot(...(pilotAfter.mission?.pilot?.offset ?? [0, 0, 0])) > Math.hypot(...pilotBefore.offset) + 0.005,
+    'Standalone Pilot input did not move the visual spacecraft.',
+  );
+  assert(Math.abs((pilotAfter.progress ?? 0) - (pilotBefore.progress ?? 0)) < 1e-10, 'Standalone Pilot changed scientific mission progress while paused.');
+  await page.locator('.pilot-rejoin').click();
+  await sleep(800);
+  const rejoinedOffset = await page.evaluate(() => window.__SCIENCE_STANDALONE_RUNTIME__?.getSnapshot().mission?.pilot?.offset ?? [1, 1, 1]);
+  assert(Math.hypot(...rejoinedOffset) < 0.001, 'Standalone Pilot did not rejoin the scientific route.');
+
   await selectValue(page, '#standalone-mission-camera', 'follow');
   await selectValue(page, '#standalone-mission-follow', 'far');
   const camera = await page.evaluate(() => window.__SCIENCE_STANDALONE_RUNTIME__?.getSnapshot().mission);
@@ -191,7 +226,8 @@ async function run() {
     noHttpRequests: true,
     initialMission: { destinationId: 'mars', cameraMode: 'free', followDistance: 'near', active: true },
     replannedMission: { destinationId: 'venus', missionType: 'flyby', progress: 0.25 },
-    cameraModes: ['free', 'follow'],
+    cameraModes: ['free', 'pilot', 'follow'],
+    assistedPilot: { moved: true, scientificProgressUnchanged: true, rejoined: true, minimumTouchTargetPx: pilotAfter.minimumTouchTarget },
     consoleErrors,
     pageErrors,
     failedRequests,

@@ -391,6 +391,11 @@ export class TrajectoryEngine {
       : Math.abs(transfer.phaseResidualRad) >= Math.PI / 180
         ? 'No Hohmann launch solution converged within the installed educational model threshold.'
         : undefined;
+    const rejectionCode = !fuelValid
+      ? 'insufficient-delta-v' as const
+      : Math.abs(transfer.phaseResidualRad) >= Math.PI / 180
+        ? 'launch-solution-not-converged' as const
+        : undefined;
     const departure = transfer.departureSimulationDays;
     const arrival = departure + transfer.durationDays;
 
@@ -399,6 +404,7 @@ export class TrajectoryEngine {
       version: '1.0',
       valid,
       rejectionReason,
+      rejectionCode,
       originId: 'earth',
       destinationId: destination.id,
       destinationName: destination.name,
@@ -451,12 +457,18 @@ export class TrajectoryEngine {
       : valid
         ? undefined
         : 'The selected simplified fuel budget is insufficient for the Earth-orbit rehearsal.';
+    const rejectionCode = input.missionType !== 'orbiter'
+      ? 'earth-requires-orbiter' as const
+      : valid
+        ? undefined
+        : 'earth-orbit-insufficient-fuel' as const;
     const trajectory = sampleEarthOrbit(input.simulationDays);
     return {
       id: `mission-earth-earth-orbiter-${input.simulationDays.toFixed(5)}`,
       version: '1.0',
       valid,
       rejectionReason,
+      rejectionCode,
       originId: 'earth',
       destinationId: destination.id,
       destinationName: destination.name,

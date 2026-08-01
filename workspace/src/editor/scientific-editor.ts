@@ -22,6 +22,14 @@ import { SolarSystemRuntime } from '../templates/solar-system/runtime';
 import { createSimulationWorker } from '../workers/simulation-worker-factory';
 import { ScientificLearningController } from './scientific-learning-controller';
 import { SpacecraftTravelController } from './spacecraft-travel-controller';
+import {
+  createI18n,
+  DomLocalizer,
+  localeFromStorage,
+  persistLocale,
+  setDocumentLocale,
+  type AppLocale,
+} from '../i18n';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -30,11 +38,15 @@ interface BeforeInstallPromptEvent extends Event {
 
 interface ScienceQaBridge {
   focusObject(id: string): void;
+  trackObject(id: string): void;
+  inspectObject(id: string): void;
   setPlaybackRate(daysPerSecond: number): number;
   setPlaying(playing: boolean): void;
   setSimulationTime(simulationDays: number): void;
   setQuality(quality: 'low' | 'auto' | 'high'): void;
   setComplexity(complexity: ComplexityMode): void;
+  setLocale(locale: AppLocale): void;
+  getLocale(): AppLocale;
   openControlCenter(tab?: string): void;
   closeControlCenter(): void;
   getVisualDiagnostics(): ReturnType<SolarSystemRuntime['getVisualDiagnostics']>;
@@ -46,18 +58,22 @@ interface ScienceQaBridge {
     simulationDays: number;
     playbackRateDaysPerSecond: number;
     playing: boolean;
-    renderer: 'webgl' | 'canvas-2d';
+      renderer: 'webgl' | 'canvas-2d';
+      locale: AppLocale;
   };
 }
 
 declare global {
   interface Window {
     __SCIENCE_QA__?: ScienceQaBridge;
+    render_game_to_text?: () => string;
   }
 }
 
 type ComplexityMode = 'basic' | 'advanced';
 type FloatingCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+type ResponsiveShellMode = 'wide' | 'compact' | 'immersive';
+type CompactDrawer = 'templates' | 'inspector' | null;
 
 const CUSTOM_PRESETS_KEY = 'solar-explorer-v05-time-presets';
 const COMPLEXITY_KEY = 'solar-explorer-v05-complexity';
@@ -121,6 +137,8 @@ function parseCustomPresets(): TimePreset[] {
 export class ScientificEditor {
   private readonly root: HTMLElement;
   private readonly runtime = new SolarSystemRuntime({ createSimulationWorker });
+  private locale: AppLocale = localeFromStorage();
+  private domLocalizer?: DomLocalizer;
   private parameters = defaultParameters(solarSystemManifest);
   private undoStack: ParameterMap[] = [];
   private redoStack: ParameterMap[] = [];
@@ -130,16 +148,6 @@ export class ScientificEditor {
   private statusTimer?: number;
   private simulationUiTimer?: number;
   private lastSimulationUiUpdateMs = 0;
-  private readonly simulationDateFormatter = new Intl.DateTimeFormat('en-SG', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  });
   private renderedFrames = 0;
   private frameRateTimer?: number;
   private frameRateSampledAt = 0;
@@ -160,6 +168,10 @@ export class ScientificEditor {
   private floatingWasDragged = false;
   private leftPanelCollapsed = localStorage.getItem(LEFT_PANEL_COLLAPSED_KEY) !== 'false';
   private rightPanelCollapsed = localStorage.getItem(RIGHT_PANEL_COLLAPSED_KEY) !== 'false';
+  private responsiveShellMode: ResponsiveShellMode = 'wide';
+  private compactDrawer: CompactDrawer = null;
+  private compactDrawerTrigger?: HTMLElement;
+  private compactDrawerFocusTimer?: number;
   private controlCenterTrigger?: HTMLElement;
   private focusedObject = 'sun';
   private scientificLearning?: ScientificLearningController;
@@ -170,13 +182,18 @@ export class ScientificEditor {
   }
 
   async start(): Promise<void> {
+    setDocumentLocale(this.locale);
     this.render();
     this.applyComplexityMode();
     this.applyFloatingCorner();
+    this.updateResponsiveShellMode();
     this.applySidePanelState();
     this.bindShellEvents();
     this.renderParameterControls();
     this.renderTimePresets();
+    this.domLocalizer = new DomLocalizer(this.root, this.locale);
+    this.domLocalizer.start();
+    this.runtime.setLocale(this.locale);
 
     const viewport = this.requireElement<HTMLElement>('#runtime-viewport');
     const bounds = viewport.getBoundingClientRect();
@@ -231,6 +248,7 @@ export class ScientificEditor {
       queueSave: () => this.queueAutosave(),
     });
     this.spacecraftTravel.mount();
+    this.spacecraftTravel.setLocale(this.locale);
 
     this.scientificLearning = new ScientificLearningController({
       root: this.root,
@@ -245,6 +263,7 @@ export class ScientificEditor {
       onTravelDestination: (id) => this.spacecraftTravel?.openForDestination(id),
     });
     this.scientificLearning.mount();
+    this.scientificLearning.setLocale(this.locale);
 
     await this.restoreLastProject();
     this.updateHistoryButtons();
@@ -264,7 +283,7 @@ export class ScientificEditor {
           <div class="brand-lockup">
             <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
             <div>
-              <h1>Solar System Explorer</h1>
+              <h1 data-i18n="app.explorer">Solar System Explorer</h1>
               <small>Scientific Animation Generator · v${APP_VERSION}</small>
             </div>
           </div>
@@ -275,6 +294,11 @@ export class ScientificEditor {
             <button id="toggle-inspector-panel" class="panel-toggle-button" type="button" aria-controls="inspector-panel"><span aria-hidden="true">◫</span> Inspector</button>
           </div>
           <div class="topbar-actions">
+            <label class="topbar-locale-switch" for="topbar-locale-select">
+              <span aria-hidden="true">◎</span>
+              <span class="sr-only">Language / 语言</span>
+              <select id="topbar-locale-select" aria-label="Language / 语言"><option value="en" ${this.locale === 'en' ? 'selected' : ''}>English</option><option value="zh-CN" ${this.locale === 'zh-CN' ? 'selected' : ''}>简体中文</option></select>
+            </label>
             <button id="open-control-center-button" class="secondary-button" type="button"><span aria-hidden="true">☰</span> Control Center</button>
             <button id="copy-embed-button" class="secondary-button" type="button"><span aria-hidden="true">⧉</span> Copy iframe</button>
             <button id="fullscreen-button" class="secondary-button" type="button"><span aria-hidden="true">⛶</span> Full screen</button>
@@ -284,47 +308,37 @@ export class ScientificEditor {
         </header>
 
         <main class="editor-grid">
-          <h1 class="sr-only">Solar System Explorer</h1>
+          <h1 class="sr-only" data-i18n="app.explorer">Solar System Explorer</h1>
+          <button id="compact-drawer-backdrop" class="compact-drawer-backdrop" type="button" aria-label="Close side panel" tabindex="-1"></button>
           <aside id="templates-panel" class="side-panel templates-panel desktop-shell" aria-label="Template library">
             <div class="panel-heading">
               <div><span class="eyebrow">Template library</span><h2>Scenes</h2></div>
-              <span class="scene-count">1 scene</span>
+              <div class="panel-heading-actions"><span class="scene-count">1 scene</span><button class="compact-panel-close" type="button" data-close-compact-drawer aria-label="Close template library">×</button></div>
             </div>
-            <div class="template-list">
-              <button class="template-card is-active" type="button">
-                <span class="template-preview solar-preview" aria-hidden="true"><i class="orbit-ring"></i><i class="planet-sphere"></i></span>
-                <span><strong>Solar System Explorer</strong><small>Explore · Learn · Travel foundation</small></span>
-                <em>Active</em>
-              </button>
-              <button class="template-card" type="button" disabled>
-                <span class="template-preview weather-preview" aria-hidden="true">≋</span>
-                <span><strong>Weather Wind Field</strong><small>Future theme</small></span>
-                <em>Planned</em>
-              </button>
-            </div>
-            <div class="panel-note">
-              <span class="eyebrow">Current programme</span>
-              <p>v0.6 adds guided astronomy learning, event jumps, observer locations, sky coordinates and visible scientific provenance.</p>
-              <a class="panel-link" href="/review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener">View release notes <span aria-hidden="true">→</span></a>
-            </div>
+            <div class="side-panel-scroll">
+              <div class="template-list">
+                <button class="template-card is-active" type="button">
+                  <span class="template-preview solar-preview" aria-hidden="true"><i class="orbit-ring"></i><i class="planet-sphere"></i></span>
+                  <span class="template-card-copy"><strong>Solar System Explorer</strong><small>Explore · Learn · Travel foundation</small><em>Active</em></span>
+                </button>
+                <button class="template-card" type="button" disabled>
+                  <span class="template-preview weather-preview" aria-hidden="true">≋</span>
+                  <span class="template-card-copy"><strong>Weather Wind Field</strong><small>Future theme</small><em>Planned</em></span>
+                </button>
+              </div>
 
-            <nav class="quick-access" aria-label="Quick access">
-              <span class="eyebrow">Quick access</span>
-              <button type="button" data-quick-access="accuracy-report"><i class="quick-icon is-teal" aria-hidden="true">✓</i> Scientific Accuracy Report</button>
-              <a href="/review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener"><i class="quick-icon is-blue" aria-hidden="true">≡</i> Release notes</a>
-              <a href="/ATTRIBUTION.md" target="_blank" rel="noopener"><i class="quick-icon is-amber" aria-hidden="true">◎</i> Texture attribution</a>
-              <a href="/PRIVACY.md" target="_blank" rel="noopener"><i class="quick-icon is-violet" aria-hidden="true">◐</i> Privacy</a>
-            </nav>
+              <nav class="quick-access" aria-label="Quick access">
+                <span class="eyebrow">Quick access</span>
+                <button type="button" data-quick-access="accuracy-report"><i class="quick-icon is-teal" aria-hidden="true">✓</i> Scientific Accuracy Report</button>
+                <a href="/review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener"><i class="quick-icon is-blue" aria-hidden="true">≡</i> Release notes</a>
+                <a href="/ATTRIBUTION.md" target="_blank" rel="noopener"><i class="quick-icon is-amber" aria-hidden="true">◎</i> Texture attribution</a>
+                <a href="/PRIVACY.md" target="_blank" rel="noopener"><i class="quick-icon is-violet" aria-hidden="true">◐</i> Privacy</a>
+              </nav>
+            </div>
 
             <div class="panel-footer">
-              <span id="panel-status" class="panel-status">Starting scientific runtime…</span>
-              <div class="panel-icon-row">
-                <button id="undo-button" class="icon-button" type="button" aria-label="Undo" title="Undo">↶</button>
-                <button id="redo-button" class="icon-button" type="button" aria-label="Redo" title="Redo">↷</button>
-                <button id="panel-complexity-button" class="icon-button" type="button" aria-label="Toggle Basic and Advanced complexity" title="Toggle Basic and Advanced complexity">◑</button>
-                <button id="panel-settings-button" class="icon-button" type="button" aria-label="Open Control Center" title="Open Control Center">⚙</button>
-                <button id="panel-reset-button" class="icon-button" type="button" aria-label="Reset simulation" title="Reset simulation">↻</button>
-              </div>
+              <button id="undo-button" class="panel-history-button" type="button"><span aria-hidden="true">↶</span> Undo</button>
+              <button id="redo-button" class="panel-history-button" type="button"><span aria-hidden="true">↷</span> Redo</button>
             </div>
           </aside>
 
@@ -334,7 +348,7 @@ export class ScientificEditor {
                 <button id="play-button" class="toolbar-button is-emphasis" type="button"><span>Ⅱ</span> Pause</button>
                 <button id="reset-button" class="toolbar-button" type="button"><span>↺</span> Reset</button>
               </div>
-              <label class="toolbar-select">Focus
+              <label class="toolbar-select">Track
                 <select id="focus-select">${focusOptions}</select>
               </label>
               <div class="workspace-toolbar-spacer"></div>
@@ -361,7 +375,7 @@ export class ScientificEditor {
               <div class="view-controls desktop-shell">
                 <span class="eyebrow">View controls</span>
                 <div class="view-controls-row">
-                  <button type="button" data-view-control="focus" aria-label="Focus selected object" title="Focus selected object">⌖</button>
+                  <button type="button" data-view-control="focus" aria-label="Inspect selected object close up" title="Inspect selected object close up">⌖</button>
                   <button type="button" data-view-control="reframe" aria-label="Frame whole system" title="Frame whole system">✥</button>
                   <button type="button" data-view-control="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
                   <button type="button" data-view-control="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
@@ -371,7 +385,7 @@ export class ScientificEditor {
               <div class="viewport-hint desktop-shell">
                 <span><i aria-hidden="true">✥</i> Drag to orbit</span>
                 <span><i aria-hidden="true">⇕</i> Scroll to zoom</span>
-                <span><i aria-hidden="true">⌖</i> Tap to focus</span>
+                <span><i aria-hidden="true">⌖</i> Tap to track</span>
               </div>
             </div>
 
@@ -399,11 +413,14 @@ export class ScientificEditor {
           <aside id="inspector-panel" class="side-panel inspector-panel desktop-shell" aria-label="Template parameters">
             <div class="panel-heading">
               <div><span class="eyebrow">Inspector</span><h2>Scene parameters</h2></div>
+              <button class="compact-panel-close" type="button" data-close-compact-drawer aria-label="Close inspector">×</button>
             </div>
-            <div id="parameter-controls" class="parameter-controls"></div>
-            <section class="inspector-section selected-object-card" data-object-science-root aria-live="polite"></section>
-            <div id="parameter-controls-extra" class="parameter-controls"></div>
-            <section class="inspector-section accuracy-card" data-sources-accuracy-root></section>
+            <div class="side-panel-scroll inspector-scroll">
+              <div id="parameter-controls" class="parameter-controls"></div>
+              <section class="inspector-section selected-object-card" data-object-science-root aria-live="polite"></section>
+              <div id="parameter-controls-extra" class="parameter-controls"></div>
+              <section class="inspector-section accuracy-card" data-sources-accuracy-root></section>
+            </div>
           </aside>
         </main>
 
@@ -429,9 +446,10 @@ export class ScientificEditor {
             <header class="control-center-header">
               <div>
                 <span class="eyebrow">Solar System Explorer</span>
-                <h2 id="control-center-title">Control Center</h2>
+                <h2 id="control-center-title" data-i18n="app.controlCenter">Control Center</h2>
               </div>
               <div id="experience-switch-root"></div>
+              <label class="locale-switch mobile-locale-switch" for="mobile-locale-select"><span>Language / 语言</span><select id="mobile-locale-select" aria-label="Language / 语言"><option value="en" ${this.locale === 'en' ? 'selected' : ''}>English</option><option value="zh-CN" ${this.locale === 'zh-CN' ? 'selected' : ''}>简体中文</option></select></label>
               <div class="complexity-switch" aria-label="Complexity mode">
                 <button type="button" data-complexity-mode="basic">Basic</button>
                 <button type="button" data-complexity-mode="advanced">Advanced</button>
@@ -464,7 +482,7 @@ export class ScientificEditor {
                   </div>
                 </article>
 
-                <article class="control-card">
+                <article class="control-card time-quick-card">
                   <div class="card-heading"><div><span class="eyebrow">Quick presets</span><h3>Time advanced per real second</h3></div><output id="cc-rate-output">1 day/s</output></div>
                   <div id="time-preset-grid" class="time-preset-grid"></div>
                   <label class="control-field">
@@ -473,7 +491,7 @@ export class ScientificEditor {
                   </label>
                 </article>
 
-                <article class="control-card">
+                <article class="control-card time-jump-card">
                   <div class="card-heading"><div><span class="eyebrow">Jump to time</span><h3>Exact date and time</h3></div></div>
                   <label class="control-field">
                     <span>Local date and time</span>
@@ -482,13 +500,13 @@ export class ScientificEditor {
                   <button id="apply-date-button" class="wide-button" type="button">Jump to selected time</button>
                 </article>
 
-                <article class="control-card">
+                <article class="control-card time-events-card">
                   <div class="card-heading"><div><span class="eyebrow">Event jump</span><h3>Upcoming astronomical geometry</h3></div><span class="accuracy-chip">Calculated</span></div>
                   <div class="event-catalogue compact" data-event-catalogue-root></div>
                   <small>Eclipse entries are teaching candidates from the installed educational provider, not authoritative local contact predictions.</small>
                 </article>
 
-                <article class="control-card advanced-only">
+                <article class="control-card advanced-only time-advanced-card">
                   <div class="card-heading"><div><span class="eyebrow">Advanced time</span><h3>Direction and precise timeline</h3></div><span id="direction-badge" class="direction-badge">Forward</span></div>
                   <div class="segmented-control">
                     <button type="button" data-time-direction="1">Forward</button>
@@ -498,7 +516,7 @@ export class ScientificEditor {
                   <div class="timeline-ticks"><span>1926</span><span>1976</span><span>2026</span><span>2076</span><span>2126</span></div>
                 </article>
 
-                <article class="control-card">
+                <article class="control-card time-custom-card">
                   <div class="card-heading"><div><span class="eyebrow">Custom preset</span><h3>Save your own time step</h3></div></div>
                   <div class="preset-form-grid">
                     <label class="control-field"><span>Name</span><input id="preset-name-input" type="text" maxlength="28" placeholder="Classroom slow motion" /></label>
@@ -533,14 +551,14 @@ export class ScientificEditor {
               </section>
 
               <section class="control-tab-panel" data-control-panel="learn">
-                <article class="control-card mode-intro-card">
+                <article class="control-card mode-intro-card learning-intro-card">
                   <span class="eyebrow">Learn Mode</span>
                   <strong>Guided observation without points or game levels</strong>
                   <p>Use the same authoritative Simulation Clock and Astronomy Engine as Explore Mode. Explanations change by Basic or Advanced complexity.</p>
                 </article>
                 <div id="moon-phase-root"></div>
                 <div id="learning-module-root"></div>
-                <article class="control-card">
+                <article class="control-card learning-events-card">
                   <div class="card-heading"><div><span class="eyebrow">Event catalogue</span><h3>Jump and observe</h3></div></div>
                   <div class="event-catalogue" data-event-catalogue-root></div>
                 </article>
@@ -623,7 +641,7 @@ export class ScientificEditor {
 
   private applyViewControl(action: string): void {
     const focusSelect = this.requireElement<HTMLSelectElement>('#focus-select');
-    if (action === 'focus') this.runtime.focusObject(focusSelect.value);
+    if (action === 'focus') this.runtime.inspectObject(focusSelect.value);
     else if (action === 'reframe') this.runtime.frameOverview();
     else if (action === 'zoom-in') this.runtime.zoomCamera(0.8);
     else if (action === 'zoom-out') this.runtime.zoomCamera(1.25);
@@ -710,22 +728,27 @@ export class ScientificEditor {
   }
 
   private bindShellEvents(): void {
+    this.root.querySelectorAll<HTMLSelectElement>('#topbar-locale-select, #mobile-locale-select').forEach((select) => {
+      select.addEventListener('change', (event) => {
+        this.setLocale((event.currentTarget as HTMLSelectElement).value);
+      });
+    });
     this.requireElement<HTMLButtonElement>('#play-button').addEventListener('click', () => this.setPlaying(!this.playing));
     this.requireElement<HTMLButtonElement>('#cc-play-button').addEventListener('click', () => this.setPlaying(!this.playing));
     this.requireElement<HTMLButtonElement>('#reset-button').addEventListener('click', () => this.resetSimulation());
     this.requireElement<HTMLButtonElement>('#cc-reset-button').addEventListener('click', () => this.resetSimulation());
 
     this.requireElement<HTMLSelectElement>('#focus-select').addEventListener('change', (event) => {
-      this.runtime.focusObject((event.currentTarget as HTMLSelectElement).value);
+      this.runtime.trackObject((event.currentTarget as HTMLSelectElement).value);
       this.queueAutosave();
     });
     this.requireElement<HTMLSelectElement>('#cc-focus-select').addEventListener('change', (event) => {
-      this.runtime.focusObject((event.currentTarget as HTMLSelectElement).value);
+      this.runtime.trackObject((event.currentTarget as HTMLSelectElement).value);
       this.queueAutosave();
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-focus-object]').forEach((button) => {
       button.addEventListener('click', () => {
-        this.runtime.focusObject(button.dataset.focusObject ?? 'sun');
+        this.runtime.trackObject(button.dataset.focusObject ?? 'sun');
         this.closeControlCenter();
         this.queueAutosave();
       });
@@ -796,20 +819,28 @@ export class ScientificEditor {
     });
 
     this.requireElement<HTMLButtonElement>('#toggle-templates-panel').addEventListener('click', () => {
+      if (this.responsiveShellMode === 'compact') {
+        this.toggleCompactDrawer('templates');
+        return;
+      }
       this.leftPanelCollapsed = !this.leftPanelCollapsed;
       localStorage.setItem(LEFT_PANEL_COLLAPSED_KEY, String(this.leftPanelCollapsed));
       this.applySidePanelState();
     });
     this.requireElement<HTMLButtonElement>('#toggle-inspector-panel').addEventListener('click', () => {
+      if (this.responsiveShellMode === 'compact') {
+        this.toggleCompactDrawer('inspector');
+        return;
+      }
       this.rightPanelCollapsed = !this.rightPanelCollapsed;
       localStorage.setItem(RIGHT_PANEL_COLLAPSED_KEY, String(this.rightPanelCollapsed));
       this.applySidePanelState();
     });
-    this.requireElement<HTMLButtonElement>('#panel-settings-button').addEventListener('click', () => this.openControlCenter());
-    this.requireElement<HTMLButtonElement>('#panel-reset-button').addEventListener('click', () => this.resetSimulation());
-    this.requireElement<HTMLButtonElement>('#panel-complexity-button').addEventListener('click', () => {
-      const next = this.complexity === 'advanced' ? 'basic' : 'advanced';
-      this.root.querySelector<HTMLButtonElement>(`[data-complexity-mode="${next}"]`)?.click();
+    this.requireElement<HTMLButtonElement>('#compact-drawer-backdrop').addEventListener('click', () => {
+      this.closeCompactDrawer();
+    });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-close-compact-drawer]').forEach((button) => {
+      button.addEventListener('click', () => this.closeCompactDrawer());
     });
     this.root.querySelectorAll<HTMLButtonElement>('[data-quick-access="accuracy-report"]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -872,6 +903,8 @@ export class ScientificEditor {
     this.root.querySelectorAll<HTMLButtonElement>('[data-control-tab]').forEach((button) => {
       button.addEventListener('click', () => this.activateControlTab(button.dataset.controlTab ?? 'time'));
     });
+    const controlTabs = this.requireElement<HTMLElement>('.control-tabs');
+    controlTabs.addEventListener('scroll', () => this.updateControlTabOverflow(), { passive: true });
     this.requireElement<HTMLButtonElement>('#open-control-center-button').addEventListener('click', () => this.openControlCenter());
     this.root.querySelectorAll<HTMLElement>('[data-close-control-center]').forEach((element) => {
       element.addEventListener('click', () => this.closeControlCenter());
@@ -887,6 +920,8 @@ export class ScientificEditor {
       this.controlCenterTrigger = undefined;
     });
     this.bindFloatingButton();
+    window.addEventListener('resize', this.handleResponsiveShellChange);
+    document.addEventListener('keydown', this.handleCompactDrawerKeydown);
 
     window.addEventListener('beforeinstallprompt', this.handleBeforeInstallPrompt);
     this.requireElement<HTMLButtonElement>('#install-button').addEventListener('click', async () => {
@@ -969,6 +1004,7 @@ export class ScientificEditor {
     });
     const activeTab = this.root.querySelector<HTMLElement>(`[data-control-tab="${tab}"]`);
     activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    requestAnimationFrame(() => this.updateControlTabOverflow());
     this.scientificLearning?.renderActivePanel(tab);
   }
 
@@ -987,6 +1023,7 @@ export class ScientificEditor {
     requestAnimationFrame(() => {
       const activeTab = panel.querySelector<HTMLButtonElement>('[data-control-tab].is-active:not([hidden])');
       (activeTab ?? this.requireElement<HTMLButtonElement>('.control-center-close')).focus();
+      this.updateControlTabOverflow();
     });
   }
 
@@ -1013,12 +1050,124 @@ export class ScientificEditor {
 
   private applySidePanelState(): void {
     const shell = this.requireElement<HTMLElement>('.app-shell');
+    shell.dataset.responsiveShell = this.responsiveShellMode;
+    shell.dataset.compactDrawer = this.compactDrawer ?? 'none';
     shell.dataset.leftPanelCollapsed = String(this.leftPanelCollapsed);
     shell.dataset.rightPanelCollapsed = String(this.rightPanelCollapsed);
     const leftToggle = this.requireElement<HTMLButtonElement>('#toggle-templates-panel');
     const rightToggle = this.requireElement<HTMLButtonElement>('#toggle-inspector-panel');
-    leftToggle.setAttribute('aria-expanded', String(!this.leftPanelCollapsed));
-    rightToggle.setAttribute('aria-expanded', String(!this.rightPanelCollapsed));
+    const templatesPanel = this.requireElement<HTMLElement>('#templates-panel');
+    const inspectorPanel = this.requireElement<HTMLElement>('#inspector-panel');
+    const workspace = this.requireElement<HTMLElement>('.workspace');
+    const topbar = this.requireElement<HTMLElement>('.topbar');
+    const statusbar = this.requireElement<HTMLElement>('.statusbar');
+    const compactOpen = this.responsiveShellMode === 'compact' && this.compactDrawer !== null;
+    const templatesVisible = this.responsiveShellMode === 'wide'
+      ? !this.leftPanelCollapsed
+      : this.responsiveShellMode === 'compact' && this.compactDrawer === 'templates';
+    const inspectorVisible = this.responsiveShellMode === 'wide'
+      ? !this.rightPanelCollapsed
+      : this.responsiveShellMode === 'compact' && this.compactDrawer === 'inspector';
+
+    leftToggle.setAttribute('aria-expanded', String(templatesVisible));
+    rightToggle.setAttribute('aria-expanded', String(inspectorVisible));
+    templatesPanel.setAttribute('aria-hidden', String(!templatesVisible));
+    inspectorPanel.setAttribute('aria-hidden', String(!inspectorVisible));
+    templatesPanel.inert = !templatesVisible;
+    inspectorPanel.inert = !inspectorVisible;
+    workspace.inert = compactOpen;
+    topbar.inert = compactOpen;
+    statusbar.inert = compactOpen;
+
+    for (const panel of [templatesPanel, inspectorPanel]) {
+      if (this.responsiveShellMode === 'compact') {
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+      } else {
+        panel.removeAttribute('role');
+        panel.removeAttribute('aria-modal');
+      }
+    }
+  }
+
+  private updateResponsiveShellMode(): void {
+    const nextMode: ResponsiveShellMode = window.matchMedia('(max-width: 900px), (orientation: portrait) and (max-width: 1100px)').matches
+      ? 'immersive'
+      : window.matchMedia('(max-width: 1199px)').matches
+        ? 'compact'
+        : 'wide';
+    if (nextMode !== this.responsiveShellMode) {
+      this.compactDrawer = null;
+      this.compactDrawerTrigger = undefined;
+      this.responsiveShellMode = nextMode;
+    }
+  }
+
+  private handleResponsiveShellChange = (): void => {
+    const previousMode = this.responsiveShellMode;
+    this.updateResponsiveShellMode();
+    if (previousMode !== this.responsiveShellMode) this.applySidePanelState();
+    this.updateControlTabOverflow();
+  };
+
+  private toggleCompactDrawer(drawer: Exclude<CompactDrawer, null>): void {
+    if (this.responsiveShellMode !== 'compact') return;
+    if (this.compactDrawer === drawer) {
+      this.closeCompactDrawer();
+      return;
+    }
+    this.compactDrawerTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    this.compactDrawer = drawer;
+    this.applySidePanelState();
+    const panel = this.requireElement<HTMLElement>(drawer === 'templates' ? '#templates-panel' : '#inspector-panel');
+    const focusClose = (): void => panel.querySelector<HTMLButtonElement>('[data-close-compact-drawer]')?.focus();
+    requestAnimationFrame(focusClose);
+    window.clearTimeout(this.compactDrawerFocusTimer);
+    this.compactDrawerFocusTimer = window.setTimeout(() => {
+      if (this.compactDrawer === drawer) focusClose();
+    }, 210);
+  }
+
+  private closeCompactDrawer(restoreFocus = true): void {
+    if (this.compactDrawer === null) return;
+    const trigger = this.compactDrawerTrigger;
+    window.clearTimeout(this.compactDrawerFocusTimer);
+    this.compactDrawerFocusTimer = undefined;
+    this.compactDrawer = null;
+    this.compactDrawerTrigger = undefined;
+    this.applySidePanelState();
+    if (restoreFocus) requestAnimationFrame(() => trigger?.focus());
+  }
+
+  private handleCompactDrawerKeydown = (event: KeyboardEvent): void => {
+    if (this.responsiveShellMode !== 'compact' || this.compactDrawer === null) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeCompactDrawer();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const panel = this.requireElement<HTMLElement>(this.compactDrawer === 'templates' ? '#templates-panel' : '#inspector-panel');
+    const focusable = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => element.getClientRects().length > 0);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  private updateControlTabOverflow(): void {
+    const tabs = this.root.querySelector<HTMLElement>('.control-tabs');
+    if (!tabs) return;
+    const maxScroll = Math.max(0, tabs.scrollWidth - tabs.clientWidth);
+    tabs.classList.toggle('has-overflow-start', tabs.scrollLeft > 2);
+    tabs.classList.toggle('has-overflow-end', tabs.scrollLeft < maxScroll - 2);
   }
 
   private setParameter(key: string, value: number | boolean | string, recordHistory = true): void {
@@ -1174,7 +1323,16 @@ export class ScientificEditor {
     this.lastSimulationUiUpdateMs = typeof performance === 'undefined' ? Date.now() : performance.now();
     const days = this.simulationDays;
     const date = simulationDaysToDate(days);
-    const display = this.simulationDateFormatter.format(date);
+    const display = createI18n(this.locale).date(date, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'UTC',
+    });
     this.requireElement<HTMLOutputElement>('#simulation-days').value = `Day ${days.toFixed(3)}`;
     this.requireElement<HTMLElement>('#simulation-date').textContent = display;
     this.requireElement<HTMLElement>('#toolbar-simulation-date').textContent = display;
@@ -1195,7 +1353,7 @@ export class ScientificEditor {
     this.root.querySelectorAll<HTMLButtonElement>('[data-focus-object]').forEach((button) => {
       button.classList.toggle('is-active', button.dataset.focusObject === id);
     });
-    const name = FOCUSABLE_OBJECTS.find((object) => object.id === id)?.name ?? id;
+    const name = createI18n(this.locale).objectName(id);
     this.scientificLearning?.updateFocus(id);
     this.showTransientState(`Focused on ${name}`);
   }
@@ -1222,7 +1380,7 @@ export class ScientificEditor {
     }
     this.setStatus('Embedding real planet maps and v0.5 controls…');
     const { downloadStandaloneHtml } = await import('../export/standalone-export');
-    await downloadStandaloneHtml(this.createSnapshot());
+    await downloadStandaloneHtml(this.createSnapshot(), this.locale);
     this.setStatus('Standalone HTML exported · No CDN required');
   }
 
@@ -1245,7 +1403,7 @@ export class ScientificEditor {
               ? 'Compressing source ZIP in background…'
               : 'Source ZIP ready',
         );
-      });
+      }, this.locale);
       this.setStatus('Source ZIP exported · Includes HTML and project file');
     } catch (error) {
       this.setStatus(error instanceof Error ? `ZIP export failed · ${error.message}` : 'ZIP export failed · Retry');
@@ -1382,6 +1540,8 @@ export class ScientificEditor {
     if (new URLSearchParams(window.location.search).get('qa') !== '1') return;
     window.__SCIENCE_QA__ = {
       focusObject: (id) => this.runtime.focusObject(id),
+      trackObject: (id) => this.runtime.trackObject(id),
+      inspectObject: (id) => this.runtime.inspectObject(id),
       setPlaybackRate: (daysPerSecond) => {
         const signed = signedPlaybackRate(Math.abs(daysPerSecond), daysPerSecond < 0 ? -1 : 1);
         this.direction = signed < 0 ? -1 : 1;
@@ -1400,6 +1560,8 @@ export class ScientificEditor {
         this.applyComplexityMode();
         this.syncTimeControls();
       },
+      setLocale: (locale) => this.setLocale(locale),
+      getLocale: () => this.locale,
       openControlCenter: (tab = 'time') => {
         this.activateControlTab(tab);
         this.openControlCenter();
@@ -1415,8 +1577,14 @@ export class ScientificEditor {
         playbackRateDaysPerSecond: this.direction * this.playbackMagnitude,
         playing: this.playing,
         renderer: this.root.querySelector('canvas.canvas-fallback') ? 'canvas-2d' : 'webgl',
+        locale: this.locale,
       }),
     };
+    window.render_game_to_text = () => JSON.stringify({
+      coordinateSystem: 'Three.js world coordinates; +Y is up and the camera orbits its control target.',
+      state: window.__SCIENCE_QA__?.getState(),
+      visual: this.runtime.getVisualDiagnostics(),
+    });
     document.documentElement.dataset.qaBridge = 'ready';
   }
 
@@ -1425,6 +1593,25 @@ export class ScientificEditor {
     if (element) element.textContent = message;
     const panelStatus = this.root.querySelector<HTMLElement>('#panel-status');
     if (panelStatus) panelStatus.textContent = message;
+  }
+
+  private setLocale(localeInput: unknown): void {
+    const locale: AppLocale = localeInput === 'zh-CN' ? 'zh-CN' : 'en';
+    if (locale === this.locale) return;
+    this.locale = locale;
+    persistLocale(locale);
+    setDocumentLocale(locale);
+    this.root.querySelectorAll<HTMLSelectElement>('#topbar-locale-select, #mobile-locale-select').forEach((select) => {
+      select.value = locale;
+    });
+    this.runtime.setLocale(locale);
+    this.scientificLearning?.setLocale(locale);
+    this.spacecraftTravel?.setLocale(locale);
+    this.domLocalizer?.setLocale(locale);
+    this.syncTimeControls();
+    this.renderSimulationPresentation();
+    this.domLocalizer?.refresh();
+    requestAnimationFrame(() => this.updateControlTabOverflow());
   }
 
   private requireElement<T extends Element>(selector: string): T {
@@ -1438,11 +1625,17 @@ export class ScientificEditor {
     window.clearTimeout(this.autosaveTimer);
     window.clearTimeout(this.statusTimer);
     window.clearTimeout(this.simulationUiTimer);
+    window.clearTimeout(this.compactDrawerFocusTimer);
     this.resizeObserver?.disconnect();
+    window.removeEventListener('resize', this.handleResponsiveShellChange);
+    document.removeEventListener('keydown', this.handleCompactDrawerKeydown);
+    window.removeEventListener('beforeinstallprompt', this.handleBeforeInstallPrompt);
     this.scientificLearning?.destroy();
     this.spacecraftTravel?.destroy();
+    this.domLocalizer?.destroy();
     window.removeEventListener('beforeinstallprompt', this.handleBeforeInstallPrompt);
     delete window.__SCIENCE_QA__;
+    delete window.render_game_to_text;
     delete document.documentElement.dataset.qaBridge;
     this.runtime.destroy();
   }

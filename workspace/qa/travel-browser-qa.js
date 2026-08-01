@@ -239,6 +239,43 @@ async function run() {
     window.__SCIENCE_QA__?.openControlCenter('travel');
   });
   await waitForControlCenter(page);
+  await dispatch(page, '[data-mission-camera="pilot"]');
+  await dispatch(page, '.control-center-close');
+  await sleep(100);
+  const pilotBefore = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  await page.keyboard.down('KeyW');
+  await sleep(420);
+  await page.keyboard.up('KeyW');
+  await sleep(120);
+  const pilotAfter = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  assert(pilotAfter?.mission?.cameraMode === 'pilot', 'Assisted pilot mode was not applied.');
+  assert(pilotAfter?.mission?.pilotActive === true, 'Assisted pilot diagnostics are not active.');
+  assert(
+    Math.hypot(...(pilotAfter?.mission?.pilotOffset ?? [0, 0, 0])) > Math.hypot(...(pilotBefore?.mission?.pilotOffset ?? [0, 0, 0])) + 0.005,
+    'Pilot input did not move the visual spacecraft.',
+  );
+  assert(
+    Math.abs((pilotAfter?.mission?.progress ?? 0) - (pilotBefore?.mission?.progress ?? 0)) < 1e-10,
+    'Paused assisted pilot changed authoritative mission progress.',
+  );
+  assert((pilotAfter?.mission?.spacecraftProjectedLengthPx ?? 0) >= 14, 'Adaptive spacecraft size is below the readable minimum.');
+  assert((pilotAfter?.mission?.spacecraftProjectedLengthPx ?? 1000) <= 64.5, 'Adaptive spacecraft size exceeds the visual maximum.');
+  await page.keyboard.down('Space');
+  await sleep(100);
+  await page.keyboard.up('Space');
+  await sleep(80);
+  const braked = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  assert((braked?.mission?.pilotSpeed ?? 1) < 0.01, 'Pilot brake did not stop the visual spacecraft.');
+  await dispatch(page, '.pilot-rejoin');
+  await sleep(800);
+  const rejoined = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+  assert(Math.hypot(...(rejoined?.mission?.pilotOffset ?? [1, 1, 1])) < 0.001, 'Pilot did not rejoin the scientific route.');
+  await page.screenshot({ path: join(evidenceDir, 'assisted-pilot.png'), fullPage: true });
+
+  await page.evaluate(() => {
+    window.__SCIENCE_QA__?.openControlCenter('travel');
+  });
+  await waitForControlCenter(page);
   await dispatch(page, '[data-mission-camera="free"]');
   const freeCameraState = await page.evaluate(() => ({
     diagnostics: window.__SCIENCE_QA__?.getVisualDiagnostics(),
@@ -331,7 +368,8 @@ async function run() {
     lowFuelRejected: runAdvancedFuelChecks ? true : 'covered-by-firefox-canvas',
     missionStarted: true,
     progressAdvanced: afterStep?.mission?.progress ?? 0,
-    cameraModes: ['follow', 'free'],
+    cameraModes: ['follow', 'pilot', 'free'],
+    assistedPilot: { moved: true, braked: true, rejoined: true, scientificProgressUnchanged: true },
     snapshotRestored: true,
     externalRequests: 0,
     consoleErrors,
