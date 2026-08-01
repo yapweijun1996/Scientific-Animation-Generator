@@ -235,6 +235,10 @@ const zipAssertions = [
   ['current ZIP filename', zipSource.includes('solar-system-source-v${APP_VERSION}.zip')],
   ['same standalone builder used by ZIP', zipSource.includes('createStandaloneHtml(snapshot, textureSources)')],
   ['texture byte packaging', zipSource.includes('loadTextureBytes()')],
+  // file:// blocks WebGL uploads of separately-fetched images, so index.html must embed
+  // textures inline; relative assets/ paths would silently fall back to procedural rendering.
+  ['ZIP index.html embeds textures inline', zipSource.includes('loadTextureDataUrls()')],
+  ['ZIP index.html does not reference relative texture paths', !/textureSources\[[^\]]+\]\s*=/.test(zipSource)],
   ['project snapshot packaged', zipSource.includes("archive['project.scienceproject']")],
   ['attribution packaged', zipSource.includes("archive['ATTRIBUTION.md']")],
   ['README packaged', zipSource.includes("archive['README.md']")],

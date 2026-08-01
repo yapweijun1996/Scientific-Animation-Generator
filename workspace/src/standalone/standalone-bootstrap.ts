@@ -537,7 +537,12 @@ export async function bootstrapStandalone(
   };
 
   window[STANDALONE_API_KEY] = api;
-  window.addEventListener('pagehide', destroy, { once: true });
+  // event.persisted means the browser is freezing this page for the back/forward cache, not
+  // unloading it - tearing the worker down here would leave a restored page permanently blank
+  // with no error, since bfcache restores skip re-running bootstrapStandalone().
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) destroy();
+  });
   document.documentElement.dataset.standaloneReady = 'true';
   document.documentElement.dataset.standaloneVersion = APP_VERSION;
   window.dispatchEvent(new CustomEvent('scientific-standalone-ready', { detail: { version: APP_VERSION } }));

@@ -525,9 +525,15 @@ export class RealPlanetTextureManager {
     const promise = this.loader
       .loadAsync(source)
       .then((texture) => {
+        this.inFlight.delete(filename);
+        if (this.disposed) {
+          // dispose() already ran while this fetch was in flight; nothing will ever call
+          // .dispose() on this texture again, so reclaim it here instead of orphaning it.
+          texture.dispose();
+          throw new Error(`Texture manager disposed before ${filename} finished loading.`);
+        }
         configureColorTexture(texture, this.anisotropy);
         this.loaded.set(filename, texture);
-        this.inFlight.delete(filename);
         return texture;
       })
       .catch((error) => {

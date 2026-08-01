@@ -67,7 +67,23 @@ function finiteBodyState(objectId: string, simulationDays: number): boolean {
   ].every(Number.isFinite);
 }
 
+let cachedRegressionReport: ScientificAccuracyReport | undefined;
+
+/**
+ * Runs the full self-test suite (moon-phase root-finding over 80 days, eclipse search over
+ * 1,100 days, Mars conjunction/opposition search over 1,200 days, boundary sampling, ...).
+ * The result depends only on the fixed astronomy model, never on simulationDays or wall-clock
+ * time, so it is computed once and cached — callers such as the Sources & Accuracy panel
+ * re-render this every simulation frame while playing, and re-running the regression per frame
+ * previously consumed the majority of each frame's CPU budget.
+ */
 export function runScientificAccuracyRegression(): ScientificAccuracyReport {
+  if (cachedRegressionReport) return cachedRegressionReport;
+  cachedRegressionReport = computeScientificAccuracyRegression();
+  return cachedRegressionReport;
+}
+
+function computeScientificAccuracyRegression(): ScientificAccuracyReport {
   const earthStart = planetPositionAu(EARTH, 0);
   const earthRepeat = planetPositionAu(EARTH, EARTH.orbitalPeriodDays);
   const earthRepeatError = distance(earthStart, earthRepeat);
