@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "runId": "2026-08-01T03-57-48-698Z-webkit-auto-87577",
+  "browser": "webkit",
+  "renderer": "webgl",
+  "forceCanvas": false,
+  "directFile": true,
+  "noHttpRequests": true,
+  "initialMission": {
+    "destinationId": "mars",
+    "cameraMode": "free",
+    "followDistance": "near",
+    "active": true
+  },
+  "replannedMission": {
+    "destinationId": "venus",
+    "missionType": "flyby",
+    "progress": 0.25
+  },
+  "cameraModes": [
+    "free",
+    "follow"
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failedRequests": []
+}

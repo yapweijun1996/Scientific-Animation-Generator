@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "runId": "2026-08-01T03-57-38-269Z-webkit-auto-87481",
+  "browser": "webkit",
+  "renderer": "webgl",
+  "forceCanvas": false,
+  "catalogueCount": 8,
+  "routeModel": "Hohmann transfer",
+  "lowFuelRejected": "covered-by-firefox-canvas",
+  "missionStarted": true,
+  "progressAdvanced": 0.0661144020361218,
+  "cameraModes": [
+    "follow",
+    "free"
+  ],
+  "snapshotRestored": true,
+  "externalRequests": 0,
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failedRequests": []
+}

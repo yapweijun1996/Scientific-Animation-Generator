@@ -1,30 +1,32 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T03:56:25.114Z",
-  "baseUrl": "http://127.0.0.1:55375/",
+  "runAt": "2026-08-01T03:57:29.312Z",
+  "baseUrl": "http://127.0.0.1:55521/",
   "browsers": [
     {
       "name": "chromium",
-      "viewports": [
-        {
-          "viewport": "desktop",
-          "renderer": "webgl",
-          "webGlAvailable": true,
-          "rendererFallbackExpected": false,
-          "screenshot": "main-chromium-desktop.png",
-          "consoleErrors": [],
-          "pageErrors": [],
-          "failedRequests": [],
-          "httpErrors": []
-        }
-      ],
+      "viewports": [],
       "interactions": null
     }
   ],
   "downloads": {},
   "standalone": [],
   "offline": {},
-  "canvasFallback": {},
+  "canvasFallback": {
+    "forcedWebGlUnavailable": true,
+    "moonFocus": true,
+    "asteroidBelt": true,
+    "reverseTime": true,
+    "visualScaleModes": true,
+    "realDistanceOverview": true,
+    "qualityCycle": [
+      "low",
+      "auto",
+      "high",
+      "low"
+    ],
+    "screenshot": "canvas-fallback-chromium.png"
+  },
   "mobileImmersion": {
     "fullCanvas": true,
     "floatingControl": true,
@@ -36,7 +38,7 @@
     "reverseTime": true,
     "deterministicRecompute": true,
     "deterministicStep": true,
-    "workerCanvasParity": false
+    "workerCanvasParity": true
   },
   "scientificLearning": {
     "exploreLearnModes": true,
@@ -59,8 +61,8 @@
     "calculationPresentationSeparated": true
   },
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T03-56-19-444Z-86305-chromium__desktop__viewport",
-  "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__desktop__viewport",
+  "qaRunId": "v0.7.0-release-2026-08-01T03-56-19-444Z-86305-chromium__desktop__canvas",
+  "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__desktop__canvas",
   "requestedBrowsers": [
     "chromium"
   ],
@@ -68,6 +70,6 @@
     "desktop"
   ],
   "requestedPhases": [
-    "viewport"
+    "canvas"
   ]
 }

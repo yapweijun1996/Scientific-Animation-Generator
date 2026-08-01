@@ -29,6 +29,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 interface ScienceQaBridge {
+  focusObject(id: string): void;
   setPlaybackRate(daysPerSecond: number): number;
   setPlaying(playing: boolean): void;
   setSimulationTime(simulationDays: number): void;
@@ -980,6 +981,9 @@ export class ScientificEditor {
     panel.classList.add('is-open');
     document.documentElement.classList.add('control-center-open');
     this.syncTimeControls();
+    window.clearTimeout(this.simulationUiTimer);
+    this.simulationUiTimer = undefined;
+    this.renderSimulationPresentation();
     requestAnimationFrame(() => {
       const activeTab = panel.querySelector<HTMLButtonElement>('[data-control-tab].is-active:not([hidden])');
       (activeTab ?? this.requireElement<HTMLButtonElement>('.control-center-close')).focus();
@@ -1091,7 +1095,12 @@ export class ScientificEditor {
   private setPlaying(next: boolean): void {
     this.playing = next;
     if (next) this.runtime.play();
-    else this.runtime.pause();
+    else {
+      this.runtime.pause();
+      window.clearTimeout(this.simulationUiTimer);
+      this.simulationUiTimer = undefined;
+      this.renderSimulationPresentation();
+    }
     const desktop = this.requireElement<HTMLButtonElement>('#play-button');
     const control = this.requireElement<HTMLButtonElement>('#cc-play-button');
     desktop.innerHTML = next ? '<span>Ⅱ</span> Pause' : '<span>▶</span> Play';
@@ -1372,6 +1381,7 @@ export class ScientificEditor {
   private installQaBridge(): void {
     if (new URLSearchParams(window.location.search).get('qa') !== '1') return;
     window.__SCIENCE_QA__ = {
+      focusObject: (id) => this.runtime.focusObject(id),
       setPlaybackRate: (daysPerSecond) => {
         const signed = signedPlaybackRate(Math.abs(daysPerSecond), daysPerSecond < 0 ? -1 : 1);
         this.direction = signed < 0 ? -1 : 1;

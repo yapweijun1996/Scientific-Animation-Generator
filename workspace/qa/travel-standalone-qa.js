@@ -48,11 +48,10 @@ async function waitForPanel(page, timeoutMs = 20_000) {
       const panel = document.querySelector('.standalone-panel');
       return {
         exists: panel instanceof HTMLElement,
-        hidden: panel instanceof HTMLElement ? panel.hidden : null,
-        open: panel instanceof HTMLElement ? panel.classList.contains('is-open') : false,
+        open: panel instanceof HTMLDialogElement ? panel.open : false,
       };
     });
-    if (state.exists && state.hidden === false) return state;
+    if (state.exists && state.open) return state;
     await sleep(100);
   }
   throw new Error(`Standalone panel did not open: ${JSON.stringify(state)}`);

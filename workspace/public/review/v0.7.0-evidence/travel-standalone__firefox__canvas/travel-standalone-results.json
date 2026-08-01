@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "runId": "2026-08-01T03-57-51-211Z-firefox-canvas-87606",
+  "browser": "firefox",
+  "renderer": "canvas-2d",
+  "forceCanvas": true,
+  "directFile": true,
+  "noHttpRequests": true,
+  "initialMission": {
+    "destinationId": "mars",
+    "cameraMode": "free",
+    "followDistance": "near",
+    "active": true
+  },
+  "replannedMission": {
+    "destinationId": "venus",
+    "missionType": "flyby",
+    "progress": 0.25
+  },
+  "cameraModes": [
+    "free",
+    "follow"
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failedRequests": []
+}

@@ -1,7 +1,7 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T01:48:35.958Z",
-  "baseUrl": "http://127.0.0.1:51388/",
+  "runAt": "2026-08-01T03:57:18.564Z",
+  "baseUrl": "http://127.0.0.1:55491/",
   "browsers": [
     {
       "name": "firefox",
@@ -33,7 +33,7 @@
   "observer": {},
   "visualScale": {},
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-firefox__desktop__standalone",
+  "qaRunId": "v0.7.0-release-2026-08-01T03-56-19-444Z-86305-firefox__desktop__standalone",
   "evidenceDirectory": "public/review/v0.7.0-evidence/firefox__desktop__standalone",
   "requestedBrowsers": [
     "firefox"

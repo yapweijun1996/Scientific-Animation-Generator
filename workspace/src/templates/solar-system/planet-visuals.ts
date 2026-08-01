@@ -9,7 +9,6 @@ interface Rgb {
 
 export interface SolarVisualAssets {
   planetMaterials: Map<string, THREE.MeshStandardMaterial>;
-  atmosphereMaterials: Map<string, THREE.ShaderMaterial>;
   earthCloudMaterial: THREE.MeshStandardMaterial;
   saturnRingMaterial: THREE.MeshStandardMaterial;
   sunMaterial: THREE.MeshBasicMaterial;
@@ -141,12 +140,11 @@ function createMercuryTexture(): THREE.CanvasTexture {
 }
 
 function createVenusTexture(): THREE.CanvasTexture {
-  const seed = hashSeed('venus');
   return paintPixelTexture(768, 384, (u, v) => {
-    const swirl = waveNoise((u + v * 0.18) % 1, v, seed);
-    const bands = Math.sin((v * 19 + swirl * 0.9) * Math.PI) * 0.5 + 0.5;
-    const color = mix({ r: 137, g: 78, b: 31 }, { r: 249, g: 211, b: 126 }, bands * 0.72 + 0.15);
-    return mix(color, { r: 255, g: 238, b: 183 }, Math.max(0, swirl) * 0.23);
+    const broadCloud = Math.sin((v * 5.5 + Math.sin(u * TAU) * 0.12) * TAU) * 0.5 + 0.5;
+    const softSwirl = Math.sin((u * 2.2 + v * 1.4) * TAU) * 0.5 + 0.5;
+    const color = mix({ r: 197, g: 132, b: 62 }, { r: 247, g: 213, b: 139 }, broadCloud * 0.34 + 0.42);
+    return mix(color, { r: 255, g: 235, b: 184 }, softSwirl * 0.08);
   });
 }
 
@@ -185,16 +183,17 @@ function createMarsTexture(): THREE.CanvasTexture {
 }
 
 function createJupiterTexture(): THREE.CanvasTexture {
-  const seed = hashSeed('jupiter');
   const texture = paintPixelTexture(1024, 512, (u, v) => {
-    const turbulence = waveNoise(u, v * 1.7, seed) * 0.13;
-    const stripe = Math.sin((v * 34 + turbulence) * Math.PI);
-    const narrow = Math.sin((v * 82 - turbulence * 2) * Math.PI) * 0.22;
-    const value = stripe * 0.5 + narrow;
-    const pale = { r: 222, g: 202, b: 170 };
-    const warm = { r: 174, g: 112, b: 73 };
-    const dark = { r: 103, g: 70, b: 58 };
-    return value > 0.1 ? mix(pale, warm, Math.min(1, value * 0.74)) : mix(pale, dark, Math.min(0.62, -value * 0.55));
+    const longitudeDrift = Math.sin(u * TAU * 2) * 0.018 + Math.sin(u * TAU * 5) * 0.007;
+    const broad = Math.sin((v + longitudeDrift) * Math.PI * 22);
+    const fine = Math.sin((v - longitudeDrift * 0.45) * Math.PI * 48) * 0.18;
+    const value = broad * 0.44 + fine;
+    const pale = { r: 226, g: 209, b: 181 };
+    const warm = { r: 190, g: 139, b: 99 };
+    const cool = { r: 164, g: 147, b: 132 };
+    return value >= 0
+      ? mix(pale, warm, Math.min(0.52, value * 0.5))
+      : mix(pale, cool, Math.min(0.28, -value * 0.32));
   });
   const canvas = texture.image as HTMLCanvasElement;
   const context = canvas.getContext('2d');
@@ -337,19 +336,6 @@ function createSaturnRingTexture(): THREE.CanvasTexture {
   });
 }
 
-function createSunTexture(): THREE.CanvasTexture {
-  const seed = hashSeed('sun-surface');
-  return paintPixelTexture(768, 384, (u, v) => {
-    const granulation = waveNoise(u, v, seed) * 0.5 + waveNoise(u * 2.8, v * 2.3, seed + 53) * 0.27;
-    const latitude = Math.abs(v - 0.5) * 2;
-    return mix(
-      { r: 255, g: 119, b: 17 },
-      { r: 255, g: 239, b: 117 },
-      Math.max(0.12, Math.min(0.94, 0.66 + granulation * 0.28 - latitude * 0.05)),
-    );
-  });
-}
-
 function createSunHaloTexture(): THREE.CanvasTexture {
   return canvasTexture(512, 512, (context, canvas) => {
     const center = canvas.width / 2;
@@ -364,40 +350,6 @@ function createSunHaloTexture(): THREE.CanvasTexture {
   });
 }
 
-function atmosphereMaterial(color: number, glowStrength = 0.7, rimPower = 2.35): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      glowColor: { value: new THREE.Color(color) },
-      glowStrength: { value: glowStrength },
-      rimPower: { value: rimPower },
-    },
-    vertexShader: `
-      varying float vIntensity;
-      uniform float rimPower;
-      void main() {
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        vec3 transformedNormal = normalize(normalMatrix * normal);
-        vec3 viewDirection = normalize(-mvPosition.xyz);
-        vIntensity = pow(max(0.0, 1.0 - dot(transformedNormal, viewDirection)), rimPower);
-        gl_Position = projectionMatrix * mvPosition;
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 glowColor;
-      uniform float glowStrength;
-      varying float vIntensity;
-      void main() {
-        gl_FragColor = vec4(glowColor, clamp(vIntensity * glowStrength, 0.0, 1.0));
-      }
-    `,
-    transparent: true,
-    side: THREE.BackSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-  });
-}
-
 export function createSolarVisualAssets(
   renderer: THREE.WebGLRenderer,
   planets: readonly PlanetDefinition[],
@@ -406,7 +358,6 @@ export function createSolarVisualAssets(
   const materials: THREE.Material[] = [];
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   const planetMaterials = new Map<string, THREE.MeshStandardMaterial>();
-  const atmosphereMaterials = new Map<string, THREE.ShaderMaterial>();
 
   planets.forEach((planet) => {
     const map = createPlanetTexture(planet.id);
@@ -418,6 +369,11 @@ export function createSolarVisualAssets(
       roughness: planet.id === 'earth' ? 0.74 : planet.id === 'venus' ? 0.93 : planet.id === 'jupiter' || planet.id === 'saturn' ? 0.86 : 0.8,
       metalness: 0,
     });
+    if (planet.id === 'venus' || planet.id === 'jupiter' || planet.id === 'saturn') {
+      material.emissiveMap = map;
+      material.emissive.setHex(0xffffff);
+      material.emissiveIntensity = planet.id === 'venus' ? 0.5 : planet.id === 'jupiter' ? 0.48 : 0.42;
+    }
     if (planet.id === 'mercury' || planet.id === 'earth' || planet.id === 'mars') {
       const bumpMap = createBumpTexture(planet.id);
       bumpMap.colorSpace = THREE.NoColorSpace;
@@ -459,25 +415,7 @@ export function createSolarVisualAssets(
   });
   materials.push(saturnRingMaterial);
 
-  const atmosphereProfiles: Record<string, { color: number; strength: number; power: number }> = {
-    venus: { color: 0xffc36d, strength: 0.78, power: 2.2 },
-    earth: { color: 0x48aaff, strength: 0.86, power: 2.35 },
-    mars: { color: 0xe07945, strength: 0.48, power: 2.5 },
-    jupiter: { color: 0xffc89d, strength: 0.43, power: 2.55 },
-    saturn: { color: 0xf2d5a0, strength: 0.36, power: 2.65 },
-    uranus: { color: 0x8cecff, strength: 0.5, power: 2.45 },
-    neptune: { color: 0x397cff, strength: 0.62, power: 2.35 },
-  };
-  Object.entries(atmosphereProfiles).forEach(([id, profile]) => {
-    const material = atmosphereMaterial(profile.color, profile.strength, profile.power);
-    atmosphereMaterials.set(id, material);
-    materials.push(material);
-  });
-
-  const sunMap = createSunTexture();
-  sunMap.anisotropy = anisotropy;
-  textures.push(sunMap);
-  const sunMaterial = new THREE.MeshBasicMaterial({ map: sunMap, color: 0xffffff, toneMapped: false });
+  const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffcf57, toneMapped: false });
   materials.push(sunMaterial);
 
   const haloMap = createSunHaloTexture();
@@ -499,7 +437,6 @@ export function createSolarVisualAssets(
 
   return {
     planetMaterials,
-    atmosphereMaterials,
     earthCloudMaterial,
     saturnRingMaterial,
     sunMaterial,

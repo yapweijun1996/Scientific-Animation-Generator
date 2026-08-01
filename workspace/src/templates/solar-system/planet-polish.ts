@@ -16,13 +16,10 @@ interface OverlayLayer {
 
 const TAU = Math.PI * 2;
 
-const OVERLAY_PROFILES: OverlayProfile[] = [
-  { id: 'venus', scale: 1.014, opacity: 0.28, driftPerDay: 0.0016 },
-  { id: 'jupiter', scale: 1.008, opacity: 0.3, driftPerDay: 0.0011 },
-  { id: 'saturn', scale: 1.007, opacity: 0.2, driftPerDay: 0.0007 },
-  { id: 'uranus', scale: 1.007, opacity: 0.13, driftPerDay: 0.00045 },
-  { id: 'neptune', scale: 1.009, opacity: 0.22, driftPerDay: 0.0013 },
-];
+// The previous runtime-generated overlay shells produced moire/z-fighting at
+// focus distances and duplicated detail already present in the shipped maps.
+// Keep the atmosphere pass, but bind only build-time planet textures.
+const OVERLAY_PROFILES: OverlayProfile[] = [];
 
 const ATMOSPHERE_SCALES: Record<string, number> = {
   venus: 1.09,

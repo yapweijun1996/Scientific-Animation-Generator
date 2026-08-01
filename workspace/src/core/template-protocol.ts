@@ -97,6 +97,7 @@ export interface TemplateSnapshot {
   simulationDays: number;
   seed: number;
   focusedObject?: string;
+  viewMode?: 'overview' | 'focus' | 'free';
   playing?: boolean;
   clock?: SimulationClockSnapshot;
   experience?: 'explore' | 'learn' | 'travel';

@@ -607,12 +607,14 @@ export class RealPlanetTextureManager {
       material.emissiveIntensity = 0.035;
     } else if (id === 'jupiter') {
       material.roughness = 0.94;
-      material.emissive.setHex(0x160d08);
-      material.emissiveIntensity = 0.045;
+      material.emissiveMap = source;
+      material.emissive.setHex(0xffffff);
+      material.emissiveIntensity = 0.5;
     } else if (id === 'saturn') {
       material.roughness = 0.96;
-      material.emissive.setHex(0x130e08);
-      material.emissiveIntensity = 0.038;
+      material.emissiveMap = source;
+      material.emissive.setHex(0xffffff);
+      material.emissiveIntensity = 0.44;
     } else if (id === 'uranus') {
       material.roughness = 0.91;
       material.emissive.setHex(0x071519);
@@ -625,25 +627,21 @@ export class RealPlanetTextureManager {
   }
 
   private async applyVenus(material: THREE.MeshStandardMaterial, token: number): Promise<void> {
-    const [atmosphere, surface] = await Promise.all([
-      this.load('venus-atmosphere.jpg'),
-      this.load('venus-surface.jpg'),
-    ]);
+    const atmosphere = await this.load('venus-atmosphere.jpg');
     if (!this.isCurrent(token)) return;
-    const surfaceBump = this.derivedTexture('venus-surface-bump', () => {
-      const texture = surface.clone();
-      configureDataTexture(texture, this.anisotropy);
-      return texture;
-    });
     const snapshot = this.originals.get('venus');
     if (snapshot) restoreMaterial(material, snapshot);
     material.map = atmosphere;
-    material.bumpMap = surfaceBump;
-    material.bumpScale = 0.018;
+    // Venus' opaque cloud deck should read as soft atmosphere. Using the high-
+    // contrast surface map as bump data produced black, fractured lighting at
+    // close zoom and added detail that is not optically visible from space.
+    material.bumpMap = null;
+    material.bumpScale = 0;
     material.roughness = 0.985;
     material.metalness = 0;
-    material.emissive.setHex(0x2b1608);
-    material.emissiveIntensity = 0.105;
+    material.emissiveMap = atmosphere;
+    material.emissive.setHex(0xffffff);
+    material.emissiveIntensity = 0.52;
   }
 
   private async applyEarth(material: THREE.MeshStandardMaterial, token: number): Promise<void> {

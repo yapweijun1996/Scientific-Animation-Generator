@@ -125,6 +125,7 @@ export class SolarCanvasFallback {
   private playing = true;
   private playbackRate = 1;
   private focusedObject = 'sun';
+  private viewMode: 'overview' | 'focus' | 'free' = 'overview';
   private animationFrame = 0;
   private destroyed = false;
   private lastFrame = performance.now();
@@ -189,8 +190,8 @@ export class SolarCanvasFallback {
       this.orbitPointCache.clear();
       this.orbitPathCache.clear();
       this.manualOffset = { x: 0, y: 0 };
-      if (this.focusedObject === 'sun') this.zoom = 1;
-      else this.focusObject(this.focusedObject);
+      if (this.viewMode === 'overview') this.zoom = 1;
+      else if (this.viewMode === 'focus') this.focusObject(this.focusedObject);
     }
     if (
       previousQuality !== qualityParameter(this.parameters)
@@ -248,19 +249,19 @@ export class SolarCanvasFallback {
 
   reset(): void {
     this.simulationDays = 0;
-    this.manualOffset = { x: 0, y: 0 };
-    this.zoom = 1;
-    this.focusObject('sun');
+    this.frameOverview();
   }
 
   zoomCamera(factor: number): void {
     if (!Number.isFinite(factor) || factor <= 0) return;
+    if (this.viewMode === 'overview') this.viewMode = 'free';
     const maximumZoom = scaleModeParameter(this.parameters) === 'learning' ? 22 : 80_000;
     this.zoom = Math.max(0.55, Math.min(maximumZoom, this.zoom / factor));
     this.requestRender();
   }
 
   frameOverview(): void {
+    this.viewMode = 'overview';
     this.focusedObject = 'sun';
     this.manualOffset = { x: 0, y: 0 };
     this.zoom = 1;
@@ -274,41 +275,39 @@ export class SolarCanvasFallback {
     measuredFps: number;
     averageFrameMs: number;
     effectiveQuality: 'low' | 'auto' | 'high';
+    focusedObject: string;
+    viewMode: 'overview' | 'focus' | 'free';
+    focusDecorationsHidden: boolean;
   } {
     return {
       cameraDistance: 1 / Math.max(0.00001, this.zoom),
       measuredFps: this.measuredFps,
       averageFrameMs: this.averageFrameMs,
       effectiveQuality: qualityParameter(this.parameters),
+      focusedObject: this.focusedObject,
+      viewMode: this.viewMode,
+      focusDecorationsHidden: this.viewMode === 'focus',
     };
   }
 
   focusObject(id: string): void {
     if (!isCelestialObjectId(id)) return;
+    this.viewMode = 'focus';
     this.focusedObject = id;
     this.manualOffset = { x: 0, y: 0 };
-    const scaleMode = scaleModeParameter(this.parameters);
-    this.zoom = scaleMode === 'real-scale'
-      ? id === 'sun'
-        ? 850
-        : id === MOON.id
-          ? 52_000
-          : 26_000
-      : scaleMode === 'real-distance'
-        ? id === 'sun'
-          ? 1
-          : id === MOON.id || id === 'earth'
-            ? 5_200
-            : id === 'saturn'
-              ? 38
-              : 58
-        : id === 'sun'
-          ? 1
-          : id === 'saturn'
-            ? 3.1
-            : id === MOON.id
-              ? 7.2
-              : 3.65;
+    const width = Math.max(1, this.viewport.width);
+    const height = Math.max(1, this.viewport.height);
+    const overviewRadius = visualModeParameter(this.parameters) === 'scientific'
+      ? maximumVisualOrbitRadius(PLANETS, 'scientific', numericParameter(this.parameters, 'distanceScale', 1)) * 1.08
+      : 26.4;
+    const baseScale = (Math.min(width, height) * 0.43) / overviewRadius;
+    const extent = id === 'sun'
+      ? this.sunRadius()
+      : id === MOON.id
+        ? this.moonRadius()
+        : this.planetRadius(PLANETS.find((planet) => planet.id === id) ?? EARTH) * (id === 'saturn' ? 2.45 : 1);
+    const targetRadius = Math.min(width, height) * (id === 'saturn' ? 0.11 : id === 'sun' ? 0.1 : 0.09);
+    this.zoom = Math.max(0.55, Math.min(80_000, targetRadius / Math.max(0.000001, extent * baseScale)));
     this.requestRender();
     this.context?.onFocusChange?.(id);
     this.context?.onStatus?.(`Focused on ${celestialObjectName(id)} · Canvas 2D mode`);
@@ -318,6 +317,7 @@ export class SolarCanvasFallback {
     this.mission = mission?.plan
       ? { ...mission, realism: { ...mission.realism } }
       : undefined;
+    if (mission?.active) this.viewMode = 'free';
     this.updateMissionState();
     this.requestRender();
   }
@@ -356,6 +356,7 @@ export class SolarCanvasFallback {
       simulationDays: this.simulationDays,
       seed: this.context?.seed ?? DEFAULT_PROJECT_SEED,
       focusedObject: this.focusedObject,
+      viewMode: this.viewMode,
       playing: this.playing,
       mission: this.mission,
       clock: {
@@ -373,7 +374,9 @@ export class SolarCanvasFallback {
     this.simulationDays = snapshot.simulationDays;
     this.playing = snapshot.playing !== false;
     this.setMission(snapshot.mission);
-    this.focusObject(snapshot.focusedObject ?? 'sun');
+    const focusedObject = snapshot.focusedObject ?? 'sun';
+    if (snapshot.viewMode === 'overview' || (!snapshot.viewMode && focusedObject === 'sun')) this.frameOverview();
+    else this.focusObject(focusedObject);
     this.lastFrame = performance.now();
     this.requestRender();
   }
@@ -419,7 +422,9 @@ export class SolarCanvasFallback {
   private animate = (now = performance.now()): void => {
     this.animationFrame = 0;
     const elapsedMs = now - this.lastFrame;
-    if (this.playing && elapsedMs < 1_000 / 30) {
+    // A small tolerance avoids missing the second 60 Hz callback because of timer
+    // quantisation (33.1 ms can otherwise fail a strict 33.33 ms comparison and fall to 20 FPS).
+    if (this.playing && elapsedMs < 30) {
       this.requestRender();
       return;
     }
@@ -563,9 +568,11 @@ export class SolarCanvasFallback {
       y: height * 0.52 - focusWorld.y * scale + this.manualOffset.y,
     };
 
-    this.drawAsteroidBelt(context, origin, scale);
-    if (booleanParameter(this.parameters, 'showOrbits', true)) this.drawOrbits(context, origin, scale, earthWorld);
-    this.drawMissionTrajectory(context, origin, scale);
+    if (this.viewMode !== 'focus') {
+      this.drawAsteroidBelt(context, origin, scale);
+      if (booleanParameter(this.parameters, 'showOrbits', true)) this.drawOrbits(context, origin, scale, earthWorld);
+      this.drawMissionTrajectory(context, origin, scale);
+    }
 
     this.positionedPlanets = PLANETS.map((planet) => {
       const world = this.orbitPosition(planet);
@@ -598,15 +605,20 @@ export class SolarCanvasFallback {
       : scaleModeParameter(this.parameters) === 'real-scale'
         ? Math.max(0.55, this.sunRadius() * scale)
         : Math.max(0.35, this.sunRadius() * scale);
-    this.drawSun(context, origin, sunRadius);
-    const drawables: Array<{ y: number; draw: () => void }> = this.positionedPlanets.map((positioned) => ({
+    if (this.viewMode !== 'focus' || this.focusedObject === 'sun') this.drawSun(context, origin, sunRadius);
+    const visiblePlanets = this.viewMode === 'focus'
+      ? this.positionedPlanets.filter((positioned) => positioned.planet.id === this.focusedObject)
+      : this.positionedPlanets;
+    const drawables: Array<{ y: number; draw: () => void }> = visiblePlanets.map((positioned) => ({
       y: positioned.screen.y,
       draw: () => this.drawPlanet(context, positioned),
     }));
-    drawables.push({
-      y: this.positionedMoon.screen.y,
-      draw: () => this.drawMoon(context, this.positionedMoon!, origin),
-    });
+    if (this.viewMode !== 'focus' || this.focusedObject === MOON.id) {
+      drawables.push({
+        y: this.positionedMoon.screen.y,
+        draw: () => this.drawMoon(context, this.positionedMoon!, origin),
+      });
+    }
     drawables.sort((a, b) => a.y - b.y).forEach((entry) => entry.draw());
     this.drawSpacecraft(context, origin, scale);
   }
@@ -802,7 +814,7 @@ export class SolarCanvasFallback {
     context.beginPath();
     context.arc(center.x, center.y, radius, 0, TAU);
     context.fill();
-    if (booleanParameter(this.parameters, 'showLabels', true)) this.drawLabel(context, 'Sun', center.x, center.y - radius - 8);
+    if (this.shouldDrawLabel('sun')) this.drawLabel(context, 'Sun', center.x, center.y - radius - 8);
   }
 
   private drawPlanet(context: CanvasRenderingContext2D, positioned: PositionedPlanet): void {
@@ -846,7 +858,7 @@ export class SolarCanvasFallback {
     if (planet.id === 'saturn') this.drawSaturnRings(context, screen, radius, false);
     if (['venus', 'earth', 'mars', 'uranus', 'neptune'].includes(planet.id)) this.drawAtmosphere(context, screen, radius, planet.id);
     if (scaleModeParameter(this.parameters) !== 'learning' && radius < 2) this.drawLocator(context, screen, radius);
-    if (booleanParameter(this.parameters, 'showLabels', true)) this.drawLabel(context, planet.name, screen.x, screen.y - Math.max(radius, 4) - 7);
+    if (this.shouldDrawLabel(planet.id)) this.drawLabel(context, planet.name, screen.x, screen.y - Math.max(radius, 4) - 7);
   }
 
   private drawMoon(context: CanvasRenderingContext2D, moon: PositionedMoon, sunScreen: Point): void {
@@ -899,7 +911,7 @@ export class SolarCanvasFallback {
     context.arc(screen.x, screen.y, radius, 0, TAU);
     context.stroke();
     if (scaleModeParameter(this.parameters) !== 'learning' && radius < 2) this.drawLocator(context, screen, radius);
-    if (booleanParameter(this.parameters, 'showLabels', true)) this.drawLabel(context, MOON.name, screen.x, screen.y - Math.max(radius, 4) - 7);
+    if (this.shouldDrawLabel(MOON.id)) this.drawLabel(context, MOON.name, screen.x, screen.y - Math.max(radius, 4) - 7);
   }
 
   private drawLocator(context: CanvasRenderingContext2D, center: Point, radius: number): void {
@@ -1106,8 +1118,16 @@ export class SolarCanvasFallback {
     context.restore();
   }
 
+  private shouldDrawLabel(id: string): boolean {
+    if (!booleanParameter(this.parameters, 'showLabels', true)) return false;
+    if (this.viewMode === 'focus') return id === this.focusedObject;
+    if (this.viewport.width >= 1_000) return true;
+    return ['sun', 'earth', 'jupiter', 'saturn', 'uranus', 'neptune'].includes(id);
+  }
+
   private handlePointerDown = (event: PointerEvent): void => {
     if (!this.canvas) return;
+    if (this.viewMode === 'overview') this.viewMode = 'free';
     this.dragging = true;
     this.lastPointer = { x: event.clientX, y: event.clientY };
     this.pointerDown = { ...this.lastPointer };
@@ -1143,6 +1163,7 @@ export class SolarCanvasFallback {
 
   private handleWheel = (event: WheelEvent): void => {
     event.preventDefault();
+    if (this.viewMode === 'overview') this.viewMode = 'free';
     const maximumZoom = scaleModeParameter(this.parameters) === 'real-scale' ? 120_000 : 9;
     this.zoom = Math.max(0.55, Math.min(maximumZoom, this.zoom * Math.exp(-event.deltaY * 0.001)));
     this.requestRender();

@@ -50,7 +50,6 @@ import {
   type PlanetTextureQuality,
   type PlanetTextureSourceResolver,
 } from './real-planet-textures';
-import { PlanetPolishSystem, atmosphereScaleFor, type PlanetPolishQuality } from './planet-polish';
 import { SpacecraftMissionVisual } from '../../travel/spacecraft-mission-visual';
 import type { MissionCameraMode, MissionFollowDistance, MissionRuntimeState, MissionSnapshot } from '../../travel/types';
 import {
@@ -104,7 +103,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   private worker?: Worker;
   private visualAssets?: SolarVisualAssets;
   private realTextures?: RealPlanetTextureManager;
-  private planetPolish?: PlanetPolishSystem;
   private moonVisual?: MoonVisualSystem;
   private fallback?: SolarCanvasFallback;
   private spacecraftMission?: SpacecraftMissionVisual;
@@ -116,7 +114,14 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   private lastRenderedAt = 0;
   // Scratch state reused every frame so the label pass allocates nothing.
   private readonly scratchVector = new THREE.Vector3();
-  private readonly labelCandidates: Array<{ id: string; label: HTMLElement; x: number; y: number; priority: number }> = [];
+  private readonly labelCandidates: Array<{
+    id: string;
+    label: HTMLElement;
+    x: number;
+    y: number;
+    radiusPx: number;
+    priority: number;
+  }> = [];
   private readonly labelOccupied: Array<{ left: number; right: number; top: number; bottom: number }> = [];
   private readonly labelStyleState = new Map<
     string,
@@ -124,13 +129,14 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   >();
   private simulationDays = 0;
   private playing = true;
+  private pausedSimulationDays?: number;
   private playbackRate = 32;
   private focusedObject = 'sun';
+  private viewMode: 'overview' | 'focus' | 'free' = 'overview';
   private planetRoots = new Map<string, THREE.Group>();
   private planetAxes = new Map<string, THREE.Group>();
   private planetMeshes = new Map<string, THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>>();
   private cloudMeshes = new Map<string, THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>>();
-  private atmosphereMeshes = new Map<string, THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>>();
   private saturnRing?: THREE.Mesh<THREE.RingGeometry, THREE.MeshStandardMaterial>;
   private moonOrbitPlane?: THREE.Group;
   private moonOrbitPivot?: THREE.Group;
@@ -142,6 +148,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   private asteroidBelt?: THREE.Points;
   private sun?: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private sunHalo?: THREE.Sprite;
+  private sunInnerHalo?: THREE.Sprite;
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
   private latestPositions = new Float32Array(PLANETS.length * 3);
@@ -180,7 +187,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.scene.background = new THREE.Color(0x020610);
     this.scene.fog = new THREE.FogExp2(0x020610, 0.009);
 
-    this.camera = new THREE.PerspectiveCamera(46, 1, 0.000001, 400);
+    this.camera = new THREE.PerspectiveCamera(46, 1, 0.000001, 1_200);
     this.camera.position.set(0, 18, 32);
 
     try {
@@ -192,7 +199,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     }
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.28;
+    this.renderer.toneMappingExposure = 1.04;
     this.renderer.domElement.className = 'solar-canvas';
     this.renderer.domElement.setAttribute('aria-label', 'Interactive 3D solar system preview');
     this.stage.prepend(this.renderer.domElement);
@@ -217,9 +224,10 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.controls.target.set(0, 0, 0);
     // Any pointer/wheel/keyboard camera change wakes the on-demand render loop.
     this.controls.addEventListener('change', this.requestRender);
+    this.controls.addEventListener('start', this.handleControlsStart);
 
-    this.scene.add(new THREE.HemisphereLight(0x789dff, 0x05070e, 0.34));
-    const sunlight = new THREE.PointLight(0xfff0c7, 345, 220, 1.55);
+    this.scene.add(new THREE.HemisphereLight(0x789dff, 0x05070e, 0.46));
+    const sunlight = new THREE.PointLight(0xfff0c7, 120, 220, 1.55);
     sunlight.position.set(0, 0, 0);
     this.scene.add(sunlight);
     const rimLight = new THREE.DirectionalLight(0x6f8cff, 0.18);
@@ -231,13 +239,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.createMoon();
     const visualAssets = this.visualAssets;
     if (!visualAssets) throw new Error('Planet visual assets were not initialized.');
-    this.planetPolish = new PlanetPolishSystem(
-      this.renderer,
-      this.planetAxes,
-      this.planetMeshes,
-      this.atmosphereMeshes,
-      visualAssets.atmosphereMaterials,
-    );
     this.updatePlanetSizes();
     this.realTextures = new RealPlanetTextureManager(
       this.renderer,
@@ -298,6 +299,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     const innerHalo = new THREE.Sprite(innerHaloMaterial);
     innerHalo.scale.set(4.6, 4.6, 1);
     this.sun.add(innerHalo);
+    this.sunInnerHalo = innerHalo;
 
     this.createLabel('sun', 'Sun');
   }
@@ -337,15 +339,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
         clouds.renderOrder = 2;
         axis.add(clouds);
         this.cloudMeshes.set(planet.id, clouds);
-      }
-
-      const atmosphereMaterial = visualAssets.atmosphereMaterials.get(planet.id);
-      if (atmosphereMaterial) {
-        const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), atmosphereMaterial);
-        atmosphere.name = `${planet.id}-atmosphere`;
-        atmosphere.renderOrder = 3;
-        axis.add(atmosphere);
-        this.atmosphereMeshes.set(planet.id, atmosphere);
       }
 
       if (planet.id === 'saturn') {
@@ -469,7 +462,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.asteroidBelt = undefined;
 
     const quality = qualityParameter(this.parameters);
-    const count = quality === 'low' ? 260 : quality === 'high' ? 1700 : 760;
+    const count = quality === 'low' ? 220 : quality === 'high' ? 1700 : 520;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     let seed = 0x51f15e;
@@ -505,12 +498,28 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       size: quality === 'high' ? 0.075 : quality === 'low' ? 0.045 : 0.058,
       sizeAttenuation: true,
       transparent: true,
-      opacity: quality === 'low' ? 0.54 : 0.7,
+      opacity: quality === 'low' ? 0.48 : quality === 'high' ? 0.7 : 0.56,
       depthWrite: false,
     });
     this.asteroidBelt = new THREE.Points(geometry, material);
     this.asteroidBelt.name = 'main-asteroid-belt';
     this.scene.add(this.asteroidBelt);
+    this.applyViewVisibility();
+  }
+
+  private applyViewVisibility(): void {
+    const showContext = this.viewMode !== 'focus';
+    const showOrbits = showContext && booleanParameter(this.parameters, 'showOrbits', true);
+    this.orbitGroup.visible = showOrbits;
+    if (this.moonOrbit) this.moonOrbit.visible = showOrbits;
+    if (this.asteroidBelt) this.asteroidBelt.visible = showContext;
+    if (this.sun) this.sun.visible = showContext || this.focusedObject === 'sun';
+    if (this.sunHalo) this.sunHalo.visible = this.viewMode !== 'focus';
+    if (this.sunInnerHalo) this.sunInnerHalo.visible = this.viewMode !== 'focus';
+    this.planetAxes.forEach((axis, id) => {
+      axis.visible = showContext || id === this.focusedObject;
+    });
+    if (this.moonMesh) this.moonMesh.visible = showContext || this.focusedObject === MOON.id;
   }
 
   private mapAuVector(x: number, y: number, z: number): THREE.Vector3 {
@@ -530,21 +539,45 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     );
   }
 
+  private systemContentRadius(): number {
+    const visualMode = visualModeParameter(this.parameters);
+    const distanceScale = numericParameter(this.parameters, 'distanceScale', 1);
+    const planetEnvelope = Math.max(...PLANETS.map((planet) => (
+      maximumVisualOrbitRadius([planet], visualMode, distanceScale)
+        + this.planetVisualRadius(planet) * (planet.id === 'saturn' ? 2.45 : 1.12)
+    )));
+    const earthRadius = this.planetVisualRadius(EARTH);
+    const earthMoonEnvelope = maximumVisualOrbitRadius([EARTH], visualMode, distanceScale)
+      + this.moonOrbitVisualRadius(earthRadius)
+      + this.moonBodyVisualRadius(earthRadius);
+    return Math.max(this.sunVisualScale() * 1.35, planetEnvelope, earthMoonEnvelope);
+  }
+
   private frameSolarOverview(): void {
-    if (!this.camera || !this.controls || this.focusedObject !== 'sun') return;
-    const radius = this.systemVisualRadius() * 1.08;
+    if (!this.camera || !this.controls) return;
+    const radius = this.systemContentRadius() * 1.08;
     const verticalHalfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(0.1, this.camera.aspect));
     const fitHalfFov = Math.max(THREE.MathUtils.degToRad(8), Math.min(verticalHalfFov, horizontalHalfFov));
-    const distance = Math.min(235, Math.max(30, radius / Math.sin(fitHalfFov)));
+    const distance = Math.max(30, radius / Math.sin(fitHalfFov));
     const direction = this.camera.position.clone().sub(this.controls.target);
     if (direction.lengthSq() < 1e-8) direction.set(0, 0.48, 0.88);
     direction.normalize();
     this.controls.target.set(0, 0, 0);
     this.camera.position.copy(direction.multiplyScalar(distance));
     this.camera.lookAt(this.controls.target);
-    this.controls.maxDistance = Math.max(260, distance * 1.25);
+    this.controls.maxDistance = Math.max(260, distance * 1.5);
+    this.camera.far = Math.max(1_200, distance + radius * 4);
+    this.camera.updateProjectionMatrix();
     this.controls.update();
+  }
+
+  private objectVisualRadius(id: string): number {
+    if (id === 'sun') return this.sunVisualScale() * 1.35;
+    if (id === MOON.id) return this.moonBodyVisualRadius(this.planetVisualRadius(EARTH));
+    const planet = PLANETS.find((entry) => entry.id === id);
+    if (!planet) return 0.1;
+    return this.planetVisualRadius(planet) * (id === 'saturn' ? 2.45 : 1.12);
   }
 
   private planetVisualRadius(planet: PlanetDefinition): number {
@@ -608,8 +641,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       const mesh = this.planetMeshes.get(planet.id);
       mesh?.scale.setScalar(radius);
       this.cloudMeshes.get(planet.id)?.scale.setScalar(radius * 1.018);
-      this.atmosphereMeshes.get(planet.id)?.scale.setScalar(radius * atmosphereScaleFor(planet.id));
-      this.planetPolish?.setPlanetRadius(planet.id, radius);
       if (planet.id === 'saturn') this.saturnRing?.scale.setScalar(radius);
     });
     this.sun?.scale.setScalar(this.sunVisualScale());
@@ -671,6 +702,14 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
 
   private handleWorkerState(message: WorkerStateMessage): void {
     if (message.type !== 'state') return;
+    if (
+      !this.playing
+      && message.step === undefined
+      && this.pausedSimulationDays !== undefined
+      && Math.abs(message.simulationDays - this.pausedSimulationDays) > 1e-10
+    ) {
+      return;
+    }
     this.simulationDays = message.simulationDays;
     this.workerReported = true;
     window.clearTimeout(this.workerWatchdog);
@@ -731,7 +770,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       if (clouds) clouds.rotation.y = this.latestRotations[index] * 1.035 + this.simulationDays * 0.008;
     });
     this.updateMoonTransform();
-    this.planetPolish?.update(this.simulationDays);
     this.spacecraftMission?.update(this.simulationDays);
   }
 
@@ -743,6 +781,10 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
   private requestRender = (): void => {
     if (this.animationFrame || this.destroyed || this.fallback) return;
     this.animationFrame = requestAnimationFrame(this.animate);
+  };
+
+  private handleControlsStart = (): void => {
+    if (this.viewMode === 'overview') this.viewMode = 'free';
   };
 
   /**
@@ -838,8 +880,17 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       if (!showLabels) return;
       const object = id === 'sun' ? this.sun : id === MOON.id ? this.moonMesh : this.planetRoots.get(id);
       if (!object) return;
-      const position = object.getWorldPosition(this.scratchVector).project(this.camera!);
-      const visible = position.z < 1 && Math.abs(position.x) <= 0.96 && Math.abs(position.y) <= 0.96;
+      const worldPosition = object.getWorldPosition(this.scratchVector);
+      const distanceToCamera = Math.max(0.00001, worldPosition.distanceTo(this.camera!.position));
+      const radiusPx = Math.max(
+        2,
+        (this.objectVisualRadius(id) / distanceToCamera)
+          * (height / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera!.fov / 2)))),
+      );
+      const position = worldPosition.project(this.camera!);
+      const visible = position.z >= -1 && position.z <= 1
+        && Math.abs(position.x) <= 1 + (radiusPx * 2) / width
+        && Math.abs(position.y) <= 1 + (radiusPx * 2) / height;
       if (!visible) {
         this.commitLabelStyle(id, label, false);
         return;
@@ -849,7 +900,18 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
         label,
         x: (position.x * 0.5 + 0.5) * width,
         y: (-position.y * 0.5 + 0.5) * height,
-        priority: id === this.focusedObject ? 0 : id === 'sun' ? 1 : id === 'earth' || id === MOON.id ? 2 : 3,
+        radiusPx,
+        priority: id === this.focusedObject
+          ? 0
+          : id === 'sun'
+            ? 1
+            : id === 'earth'
+              ? 2
+              : ['jupiter', 'saturn', 'uranus', 'neptune'].includes(id)
+                ? 3
+                : ['venus', 'mars'].includes(id)
+                  ? 4
+                  : 5,
       });
     });
     if (!showLabels) return;
@@ -857,21 +919,41 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
 
     const occupied = this.labelOccupied;
     occupied.length = 0;
-    const offsets = [-18, 18, -34, 34, -50];
-    for (const { id, label, x, y } of candidates) {
-      const autoTier = this.adaptiveQuality.snapshot().tier;
+    const autoTier = this.adaptiveQuality.snapshot().tier;
+    const maximumLabels = this.viewMode === 'focus'
+        ? 1
+      : qualityParameter(this.parameters) === 'auto' && autoTier === 'safe'
+        ? 3
+      : width < 1_000
+        ? 6
+        : Number.POSITIVE_INFINITY;
+    let visibleLabelCount = 0;
+    for (const { id, label, x, y, radiusPx } of candidates) {
       if (qualityParameter(this.parameters) === 'auto' && autoTier === 'safe' && id !== this.focusedObject && id !== 'sun' && id !== 'earth') {
+        this.commitLabelStyle(id, label, false);
+        continue;
+      }
+      if (visibleLabelCount >= maximumLabels) {
         this.commitLabelStyle(id, label, false);
         continue;
       }
       const estimatedWidth = Math.max(42, (label.textContent?.length ?? 4) * 7 + 16);
       const estimatedHeight = 22;
+      const bodyGap = 10;
+      const placements = [
+        { x, y: y - radiusPx - bodyGap - estimatedHeight / 2 },
+        { x: x + radiusPx + bodyGap + estimatedWidth / 2, y },
+        { x, y: y + radiusPx + bodyGap + estimatedHeight / 2 },
+        { x: x - radiusPx - bodyGap - estimatedWidth / 2, y },
+      ];
       let placed = false;
-      for (const offset of offsets) {
-        const left = x - estimatedWidth / 2;
-        const right = x + estimatedWidth / 2;
-        const top = y + offset - estimatedHeight / 2;
-        const bottom = y + offset + estimatedHeight / 2;
+      for (const placement of placements) {
+        const labelX = THREE.MathUtils.clamp(placement.x, estimatedWidth / 2 + 6, width - estimatedWidth / 2 - 6);
+        const labelY = THREE.MathUtils.clamp(placement.y, estimatedHeight / 2 + 6, height - estimatedHeight / 2 - 6);
+        const left = labelX - estimatedWidth / 2;
+        const right = labelX + estimatedWidth / 2;
+        const top = labelY - estimatedHeight / 2;
+        const bottom = labelY + estimatedHeight / 2;
         let overlaps = false;
         for (const item of occupied) {
           if (left < item.right + 4 && right > item.left - 4 && top < item.bottom + 4 && bottom > item.top - 4) {
@@ -879,9 +961,19 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
             break;
           }
         }
-        if (overlaps && id !== this.focusedObject) continue;
-        this.commitLabelStyle(id, label, true, x, y + offset);
+        if (overlaps) continue;
+        for (const body of candidates) {
+          const closestX = THREE.MathUtils.clamp(body.x, left, right);
+          const closestY = THREE.MathUtils.clamp(body.y, top, bottom);
+          if (Math.hypot(body.x - closestX, body.y - closestY) < body.radiusPx + 5) {
+            overlaps = true;
+            break;
+          }
+        }
+        if (overlaps) continue;
+        this.commitLabelStyle(id, label, true, labelX, labelY);
         occupied.push({ left, right, top, bottom });
+        visibleLabelCount += 1;
         placed = true;
         break;
       }
@@ -902,6 +994,8 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
 
   private handleQaView = (event: CustomEvent<{ preset?: string; viewPreset?: string }>): void => {
     if (!this.camera || !this.controls) return;
+    this.viewMode = 'free';
+    this.applyViewVisibility();
     const preset = event.detail?.preset ?? event.detail?.viewPreset ?? 'isometric';
     this.controls.target.set(0, 0, 0);
     if (preset === 'top') this.camera.position.set(0, 42, 0.01);
@@ -927,8 +1021,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     }
     this.worker?.postMessage({ type: 'configure', timeScale: this.playbackRate });
     this.updatePlanetSizes();
-    this.orbitGroup.visible = booleanParameter(this.parameters, 'showOrbits', true);
-    if (this.moonOrbit) this.moonOrbit.visible = booleanParameter(this.parameters, 'showOrbits', true);
+    this.applyViewVisibility();
     if (this.stars) this.stars.visible = booleanParameter(this.parameters, 'showStars', true);
     this.applyQuality();
 
@@ -940,11 +1033,8 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       this.rebuildOrbits();
       this.spacecraftMission?.rebuild();
       this.applyOrbitalStateToScene();
-      if (this.focusedObject === 'sun' && visualModeParameter(this.parameters) === 'scientific') {
-        this.frameSolarOverview();
-      } else if (this.focusedObject !== 'sun') {
-        this.focusObject(this.focusedObject);
-      }
+      if (this.viewMode === 'overview') this.frameSolarOverview();
+      else if (this.viewMode === 'focus') this.focusObject(this.focusedObject);
     }
     if (modeChanged || scaleModeChanged || spacingChanged || qualityChanged) this.rebuildAsteroidBelt();
     this.requestRender();
@@ -958,7 +1048,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.renderer.setPixelRatio(requestedRatio);
     this.renderer.setSize(this.resizeState.width, this.resizeState.height, false);
     const assetQuality = quality === 'auto' && autoTier !== 'normal' ? 'low' : quality;
-    this.planetPolish?.applyQuality(assetQuality as PlanetPolishQuality, this.focusedObject);
     this.moonVisual?.applyQuality(assetQuality as MoonQuality, this.focusedObject);
     // Texture work resolves asynchronously, so wake the loop again once it lands.
     void this.realTextures?.applyQuality(assetQuality as PlanetTextureQuality, this.focusedObject).then(this.requestRender);
@@ -970,6 +1059,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       this.fallback.setSimulationTime(simulationDays);
       return;
     }
+    if (!this.playing) this.pausedSimulationDays = Number.isFinite(simulationDays) ? simulationDays : 0;
     this.worker?.postMessage({ type: 'set-time', simulationDays });
   }
 
@@ -1004,15 +1094,15 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     if (!this.camera || !this.renderer) return;
     this.camera.aspect = Math.max(0.1, viewport.width / Math.max(1, viewport.height));
     this.camera.updateProjectionMatrix();
-    if (this.focusedObject === 'sun' && visualModeParameter(this.parameters) === 'scientific') {
-      this.frameSolarOverview();
-    }
+    if (this.viewMode === 'overview') this.frameSolarOverview();
+    else if (this.viewMode === 'focus') this.frameFocusedObject(this.focusedObject);
     this.applyQuality();
     this.requestRender();
   }
 
   play(): void {
     this.playing = true;
+    this.pausedSimulationDays = undefined;
     this.adaptiveQuality.reset(performance.now());
     this.lastRenderedAt = 0;
     if (this.fallback) {
@@ -1029,17 +1119,20 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       this.fallback.pause();
       return;
     }
+    this.pausedSimulationDays = this.simulationDays;
     this.worker?.postMessage({ type: 'pause' });
+    this.worker?.postMessage({ type: 'set-time', simulationDays: this.pausedSimulationDays });
   }
 
   reset(): void {
     this.simulationDays = 0;
+    if (!this.playing) this.pausedSimulationDays = 0;
     if (this.fallback) {
       this.fallback.reset();
       return;
     }
     this.worker?.postMessage({ type: 'reset' });
-    this.focusObject('sun');
+    this.frameOverview();
   }
 
   zoomCamera(factor: number): void {
@@ -1048,6 +1141,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       return;
     }
     if (!this.camera || !this.controls || !Number.isFinite(factor) || factor <= 0) return;
+    if (this.viewMode === 'overview') this.viewMode = 'free';
     const offset = this.camera.position.clone().sub(this.controls.target);
     const distance = THREE.MathUtils.clamp(
       offset.length() * factor,
@@ -1064,7 +1158,9 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       this.fallback.frameOverview();
       return;
     }
+    this.viewMode = 'overview';
     this.focusedObject = 'sun';
+    this.applyViewVisibility();
     this.context?.onFocusChange?.('sun');
     this.frameSolarOverview();
     this.context?.onStatus?.('Framed whole solar system');
@@ -1079,37 +1175,42 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     if (!this.camera || !this.controls) return;
     const target = id === 'sun' ? this.sun : id === MOON.id ? this.moonMesh : this.planetRoots.get(id);
     if (!target) return;
+    this.viewMode = 'focus';
     this.focusedObject = id;
     this.context?.onFocusChange?.(id);
-    if (id === 'sun' && scaleModeParameter(this.parameters) !== 'learning') {
-      this.frameSolarOverview();
-      this.context?.onStatus?.(`Focused on ${celestialObjectName(id)}`);
-      return;
-    }
     if (isPlanetId(id)) void this.realTextures?.focus(id);
-    const position = target.getWorldPosition(new THREE.Vector3());
-    const currentDirection = this.camera.position.clone().sub(this.controls.target).normalize();
-    const scaleMode = scaleModeParameter(this.parameters);
-    const objectRadius =
-      id === 'sun'
-        ? this.sunVisualScale() * 1.35
-        : id === MOON.id
-          ? this.moonBodyVisualRadius(this.planetVisualRadius(EARTH))
-          : isPlanetId(id)
-            ? this.planetVisualRadius(PLANETS.find((planet) => planet.id === id) ?? EARTH)
-            : 0.1;
-    const enhancedDistance = id === 'sun' ? 10 : id === 'saturn' ? 7.6 : id === MOON.id ? 2.65 : 5.5;
-    const distance = scaleMode === 'learning'
-      ? enhancedDistance
-      : id === MOON.id
-        ? Math.max(objectRadius * 14, this.moonOrbitVisualRadius(this.planetVisualRadius(EARTH)) * 0.9, 0.00012)
-        : Math.max(objectRadius * (id === 'sun' ? 16 : 12), 0.00012);
-    this.controls.target.copy(position);
-    this.camera.position.copy(position.clone().add(currentDirection.multiplyScalar(distance)));
-    this.controls.update();
+    this.applyViewVisibility();
+    this.frameFocusedObject(id);
     this.applyQuality();
     this.requestRender();
     this.context?.onStatus?.(`Focused on ${celestialObjectName(id)}`);
+  }
+
+  private frameFocusedObject(id: string): void {
+    if (!this.camera || !this.controls) return;
+    const target = id === 'sun' ? this.sun : id === MOON.id ? this.moonMesh : this.planetRoots.get(id);
+    if (!target) return;
+    const position = target.getWorldPosition(new THREE.Vector3());
+    const verticalHalfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * Math.max(0.1, this.camera.aspect));
+    const fitHalfFov = Math.max(THREE.MathUtils.degToRad(8), Math.min(verticalHalfFov, horizontalHalfFov));
+    const targetDiameterFraction = id === 'sun' ? 0.2 : id === 'saturn' ? 0.22 : 0.18;
+    const distance = Math.max(
+      0.00012,
+      this.objectVisualRadius(id) / (targetDiameterFraction * Math.tan(fitHalfFov)),
+    );
+    const direction = id === 'sun'
+      ? new THREE.Vector3(0, 0.28, 1).normalize()
+      : (() => {
+          const radial = position.clone();
+          if (radial.lengthSq() < 1e-8) radial.set(1, 0, 0);
+          radial.normalize();
+          return new THREE.Vector3(-radial.z, 0.22, radial.x).normalize();
+        })();
+    this.controls.target.copy(position);
+    this.camera.position.copy(position).add(direction.multiplyScalar(distance));
+    this.camera.lookAt(position);
+    this.controls.update();
   }
 
   private ensureSpacecraftMission(): SpacecraftMissionVisual | undefined {
@@ -1135,6 +1236,10 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       this.spacecraftMission?.setMission(undefined);
       this.requestRender();
       return;
+    }
+    if (mission.active) {
+      this.viewMode = 'free';
+      this.applyViewVisibility();
     }
     this.ensureSpacecraftMission()?.setMission(mission);
     this.requestRender();
@@ -1163,6 +1268,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       simulationDays: this.simulationDays,
       seed: this.context?.seed ?? DEFAULT_PROJECT_SEED,
       focusedObject: this.focusedObject,
+      viewMode: this.viewMode,
       playing: this.playing,
       mission: this.spacecraftMission?.getSnapshot(),
       clock: {
@@ -1193,14 +1299,25 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     this.setSimulationTime(snapshot.simulationDays);
     this.setMission(snapshot.mission);
     this.focusedObject = snapshot.focusedObject ?? 'sun';
-    this.context?.onFocusChange?.(this.focusedObject);
     if (snapshot.playing === false) this.pause();
     else this.play();
-    if (snapshot.camera && this.camera && this.controls) {
+    const restoredViewMode = snapshot.viewMode
+      ?? (this.focusedObject !== 'sun'
+        ? 'focus'
+        : snapshot.camera
+          && Math.hypot(...snapshot.camera.position.map((value, index) => value - snapshot.camera!.target[index])) < 35
+          ? 'focus'
+          : 'overview');
+    if (restoredViewMode === 'free' && snapshot.camera && this.camera && this.controls) {
+      this.viewMode = 'free';
       this.camera.position.fromArray(snapshot.camera.position);
       this.controls.target.fromArray(snapshot.camera.target);
       this.controls.update();
+      this.applyViewVisibility();
+      this.context?.onFocusChange?.(this.focusedObject);
       this.applyQuality();
+    } else if (restoredViewMode === 'overview') {
+      this.frameOverview();
     } else {
       this.focusObject(this.focusedObject);
     }
@@ -1230,6 +1347,12 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       measuredFps: this.fallback ? fallbackView?.measuredFps ?? 0 : performance.fps,
       averageFrameMs: this.fallback ? fallbackView?.averageFrameMs ?? 0 : performance.averageFrameMs,
       scaleMode,
+      focusedObject: this.fallback ? fallbackView?.focusedObject ?? this.focusedObject : this.focusedObject,
+      viewMode: this.fallback ? fallbackView?.viewMode ?? this.viewMode : this.viewMode,
+      focusDecorationsHidden: this.fallback
+        ? fallbackView?.focusDecorationsHidden ?? false
+        : this.viewMode !== 'focus'
+          || (!this.orbitGroup.visible && !this.moonOrbit?.visible && !this.asteroidBelt?.visible),
       systemVisualRadius: this.systemVisualRadius(),
       sunVisualRadius,
       earthVisualRadius: earthRadius,
@@ -1258,6 +1381,12 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
       if (!object) return [];
       const world = object.getWorldPosition(new THREE.Vector3());
       const ndc = world.clone().project(this.camera!);
+      const visualExtent = this.objectVisualRadius(id);
+      const distanceToCamera = Math.max(0.00001, world.distanceTo(this.camera!.position));
+      const projectedRadiusPx = (visualExtent / distanceToCamera)
+        * (this.resizeState.height / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera!.fov / 2))));
+      const projectedRadiusNdcX = (projectedRadiusPx * 2) / Math.max(1, this.resizeState.width);
+      const projectedRadiusNdcY = (projectedRadiusPx * 2) / Math.max(1, this.resizeState.height);
       return [{
         id,
         worldX: world.x,
@@ -1265,10 +1394,17 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
         worldZ: world.z,
         distanceFromOrigin: world.length(),
         visualRadius,
+        visualExtent,
         ndcX: ndc.x,
         ndcY: ndc.y,
         ndcZ: ndc.z,
         inViewport: Math.abs(ndc.x) <= 0.96 && Math.abs(ndc.y) <= 0.96 && ndc.z >= -1 && ndc.z <= 1,
+        projectedRadiusNdcX,
+        projectedRadiusNdcY,
+        fullyInViewport: Math.abs(ndc.x) + projectedRadiusNdcX <= 0.96
+          && Math.abs(ndc.y) + projectedRadiusNdcY <= 0.96
+          && ndc.z >= -1
+          && ndc.z <= 1,
       }];
     });
     return { ...base, objects };
@@ -1302,6 +1438,7 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     window.clearTimeout(this.workerWatchdog);
     this.fallback?.destroy();
     this.controls?.removeEventListener('change', this.requestRender);
+    this.controls?.removeEventListener('start', this.handleControlsStart);
     cancelAnimationFrame(this.animationFrame);
     this.animationFrame = 0;
     this.worker?.terminate();
@@ -1313,7 +1450,6 @@ export class SolarSystemRuntime implements ScientificTemplateRuntime {
     window.removeEventListener('mcp:set-3d-view', this.handleQaView as EventListener);
     this.controls?.dispose();
     this.spacecraftMission?.dispose();
-    this.planetPolish?.dispose();
     this.moonVisual?.dispose();
     this.scene?.traverse((object) => {
       if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {

@@ -1,7 +1,7 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T01:48:32.195Z",
-  "baseUrl": "http://127.0.0.1:51386/",
+  "runAt": "2026-08-01T03:57:16.345Z",
+  "baseUrl": "http://127.0.0.1:55489/",
   "browsers": [
     {
       "name": "chromium",
@@ -61,7 +61,7 @@
     "calculationPresentationSeparated": true
   },
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-chromium__desktop__standalone",
+  "qaRunId": "v0.7.0-release-2026-08-01T03-56-19-444Z-86305-chromium__desktop__standalone",
   "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__desktop__standalone",
   "requestedBrowsers": [
     "chromium"

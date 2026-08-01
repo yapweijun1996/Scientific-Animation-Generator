@@ -11,7 +11,8 @@ const forceCanvas = process.env.VIEWPORT_QA_FORCE_CANVAS === '1';
 const browserType = { chromium, firefox, webkit }[browserName];
 const sizes = {
   desktop: { width: 1280, height: 800, hasTouch: false },
-  tablet: { width: 834, height: 1112, hasTouch: true },
+  compact: { width: 891, height: 786, hasTouch: true },
+  tablet: { width: 768, height: 1024, hasTouch: true },
   mobile: { width: 390, height: 844, hasTouch: true },
 };
 const size = sizes[viewportName];
@@ -118,6 +119,11 @@ async function run() {
       travelTab: document.querySelectorAll('[data-control-tab="travel"]').length,
       learnTab: document.querySelectorAll('[data-control-tab="learn"]').length,
       observeTab: document.querySelectorAll('[data-control-tab="observe"]').length,
+      topbarGroupsOverlap: (() => {
+        const center = document.querySelector('.topbar-center')?.getBoundingClientRect();
+        const actions = document.querySelector('.topbar-actions')?.getBoundingClientRect();
+        return Boolean(center && actions && center.width > 0 && actions.width > 0 && center.right > actions.left);
+      })(),
     };
   });
 
@@ -126,10 +132,51 @@ async function run() {
   assert(state.focusCount === 10, `Expected 10 celestial objects, received ${state.focusCount}.`);
   assert(state.travelTab === 1 && state.learnTab === 1 && state.observeTab === 1, 'Control Center tabs are incomplete.');
   assert(state.bodyWidth <= state.innerWidth + 1, `Horizontal overflow ${state.bodyWidth} > ${state.innerWidth}.`);
-  if (viewportName === 'desktop') assert(state.topbar && state.toolbar, 'Desktop shell is hidden.');
+  if (viewportName === 'desktop') {
+    assert(state.topbar && state.toolbar, 'Desktop shell is hidden.');
+    assert(!state.topbarGroupsOverlap, 'Topbar project controls overlap the action buttons.');
+  }
   else assert(!state.topbar && !state.toolbar && state.floating, 'Mobile/tablet immersive shell is incorrect.');
   if (forceCanvas) assert(state.renderer === 'canvas-2d', `Forced Canvas rendered as ${state.renderer}.`);
   else if (browserName === 'chromium' || browserName === 'webkit') assert(state.renderer === 'webgl', `${browserName} rendered as ${state.renderer}.`);
+
+  if (!forceCanvas && viewportName === 'compact') {
+    const compactOverview = await page.evaluate(() => ({
+      diagnostics: window.__SCIENCE_QA__?.getVisualDiagnostics(),
+      stage: (() => {
+        const rect = document.querySelector('.runtime-stage')?.getBoundingClientRect();
+        return rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null;
+      })(),
+      labels: [...document.querySelectorAll('.planet-label')]
+        .filter((element) => getComputedStyle(element).display !== 'none')
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return { text: element.textContent ?? '', left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        }),
+    }));
+    const clippedObjects = compactOverview.diagnostics?.objects?.filter((object) => !object.fullyInViewport) ?? [];
+    assert(clippedObjects.length === 0, `Compact overview clips: ${clippedObjects.map((object) => object.id).join(', ')}`);
+    assert(compactOverview.labels.length <= 6, `Compact overview shows ${compactOverview.labels.length} labels; expected at most 6.`);
+    const overlappingLabels = compactOverview.labels.flatMap((label, index) => (
+      compactOverview.labels.slice(index + 1).filter((other) => (
+        label.left < other.right && label.right > other.left && label.top < other.bottom && label.bottom > other.top
+      )).map((other) => `${label.text}/${other.text}`)
+    ));
+    assert(overlappingLabels.length === 0, `Compact overview label overlap: ${overlappingLabels.join(', ')}`);
+    const bodyLabelOverlaps = compactOverview.stage
+      ? compactOverview.labels.flatMap((label) => (
+          (compactOverview.diagnostics?.objects ?? []).filter((object) => {
+            const centerX = compactOverview.stage.left + (object.ndcX * 0.5 + 0.5) * compactOverview.stage.width;
+            const centerY = compactOverview.stage.top + (-object.ndcY * 0.5 + 0.5) * compactOverview.stage.height;
+            const radius = object.projectedRadiusNdcY * compactOverview.stage.height * 0.5;
+            const closestX = Math.max(label.left, Math.min(centerX, label.right));
+            const closestY = Math.max(label.top, Math.min(centerY, label.bottom));
+            return Math.hypot(centerX - closestX, centerY - closestY) < radius;
+          }).map((object) => `${label.text}/${object.id}`)
+        ))
+      : ['missing-stage'];
+    assert(bodyLabelOverlaps.length === 0, `Compact overview label/body overlap: ${bodyLabelOverlaps.join(', ')}`);
+  }
 
   const controlTrigger = viewportName === 'desktop' ? '#open-control-center-button' : '#floating-control-button';
   await page.locator(controlTrigger).click();
@@ -144,6 +191,7 @@ async function run() {
       body.scrollTop = (body.scrollHeight - body.clientHeight) * ratio;
       scrollSamples.push(body.scrollTop);
     }
+    body.scrollTop = 0;
     return {
       open: dialog.open,
       focusedInside: active instanceof Element && dialog.contains(active),
@@ -184,6 +232,24 @@ async function run() {
     await page.locator('[data-view-control="reframe"]').click();
     const reframed = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
     assert(Number(reframed?.cameraDistance) > 0, 'WebGL Frame Overview produced an invalid camera distance.');
+    await page.evaluate(() => window.__SCIENCE_QA__?.focusObject('jupiter'));
+    await page.waitForTimeout(120);
+    const focused = await page.evaluate(() => ({
+      diagnostics: window.__SCIENCE_QA__?.getVisualDiagnostics(),
+      labels: [...document.querySelectorAll('.planet-label')]
+        .filter((element) => getComputedStyle(element).display !== 'none' && !element.hidden)
+        .map((element) => element.textContent),
+    }));
+    const focusedJupiter = focused.diagnostics?.objects?.find((object) => object.id === 'jupiter');
+    assert(focused.diagnostics?.viewMode === 'focus', 'WebGL focus did not enter focus view mode.');
+    assert(focused.diagnostics?.focusedObject === 'jupiter', 'WebGL focus diagnostics report the wrong object.');
+    assert(focused.diagnostics?.focusDecorationsHidden, 'WebGL focus left overview decorations visible.');
+    assert(
+      Number(focusedJupiter?.projectedRadiusNdcY) >= 0.14 && Number(focusedJupiter?.projectedRadiusNdcY) <= 0.25,
+      `WebGL focused Jupiter has invalid frame size ${focusedJupiter?.projectedRadiusNdcY}.`,
+    );
+    assert(focused.labels.join(',') === 'Jupiter', `WebGL focus labels are noisy: ${focused.labels.join(',')}`);
+    await page.locator('[data-view-control="reframe"]').click();
   }
   if (forceCanvas && viewportName === 'desktop') {
     const beforeZoom = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
@@ -196,6 +262,12 @@ async function run() {
     await page.locator('[data-view-control="reframe"]').click();
     const reframed = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
     assert(Math.abs(Number(reframed?.cameraDistance) - 1) < 0.001, 'Canvas Frame Overview did not restore overview zoom.');
+    await page.evaluate(() => window.__SCIENCE_QA__?.focusObject('jupiter'));
+    const focused = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
+    assert(focused?.viewMode === 'focus', 'Canvas focus did not enter focus view mode.');
+    assert(focused?.focusedObject === 'jupiter', 'Canvas focus diagnostics report the wrong object.');
+    assert(focused?.focusDecorationsHidden, 'Canvas focus left overview decorations visible.');
+    await page.locator('[data-view-control="reframe"]').click();
 
     performanceResult = await page.evaluate(async () => {
       window.__SCIENCE_QA__?.setPlaying(true);

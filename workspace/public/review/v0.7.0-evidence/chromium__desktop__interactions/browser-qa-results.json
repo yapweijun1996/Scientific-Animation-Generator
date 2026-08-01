@@ -1,7 +1,7 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T01:47:54.255Z",
-  "baseUrl": "http://127.0.0.1:51351/",
+  "runAt": "2026-08-01T03:56:53.755Z",
+  "baseUrl": "http://127.0.0.1:55461/",
   "browsers": [
     {
       "name": "chromium",
@@ -38,28 +38,16 @@
   "downloads": {
     "standalone": {
       "filename": "solar-system-animation-v0.7.0.html",
-      "bytes": 8003216,
-      "sha256": "5ccfe850184f70e09423a502cd95827299354d501861b3524043e054022ca5ae"
+      "bytes": 8002280,
+      "sha256": "a6ab4a50759053209921521ca89dc4be591c2550c6aecaeb052f42aa92ae4014"
     },
     "zip": {
       "filename": "solar-system-source-v0.7.0.zip",
-      "bytes": 11040808,
-      "sha256": "090fce2bc68f436a709d42856c6a6a57da91540d86218959eb52c4f5944b517a",
+      "bytes": 5689683,
+      "sha256": "c43316623f86fdd873f5838bbeca58f6732da9cd08982666dae725923b66c249",
       "entries": [
         "ATTRIBUTION.md",
         "README.md",
-        "assets/planets/earth-clouds.jpg",
-        "assets/planets/earth-day.jpg",
-        "assets/planets/earth-night.jpg",
-        "assets/planets/jupiter.jpg",
-        "assets/planets/mars.jpg",
-        "assets/planets/mercury.jpg",
-        "assets/planets/neptune.jpg",
-        "assets/planets/saturn-ring.png",
-        "assets/planets/saturn.jpg",
-        "assets/planets/uranus.jpg",
-        "assets/planets/venus-atmosphere.jpg",
-        "assets/planets/venus-surface.jpg",
         "index.html",
         "project.scienceproject"
       ]
@@ -102,7 +90,7 @@
     "calculationPresentationSeparated": true
   },
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-chromium__desktop__interactions",
+  "qaRunId": "v0.7.0-release-2026-08-01T03-56-19-444Z-86305-chromium__desktop__interactions",
   "evidenceDirectory": "public/review/v0.7.0-evidence/chromium__desktop__interactions",
   "requestedBrowsers": [
     "chromium"

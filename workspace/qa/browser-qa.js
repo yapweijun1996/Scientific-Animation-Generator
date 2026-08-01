@@ -206,7 +206,7 @@ const requestedBrowserNames = (process.env.QA_BROWSERS ?? 'chromium,firefox,webk
 const browserTypes = Object.fromEntries(requestedBrowserNames.map((name) => [name, allBrowserTypes[name]]));
 const viewports = {
   desktop: { width: 1280, height: 800 },
-  tablet: { width: 834, height: 1112, hasTouch: true },
+  tablet: { width: 768, height: 1024, hasTouch: true },
   mobile: { width: 390, height: 844, hasTouch: true },
 };
 const requestedViewportNames = (process.env.QA_VIEWPORTS ?? 'desktop,tablet,mobile')
@@ -389,6 +389,13 @@ async function verifyMainPage(browserName, browser, viewportName, viewport) {
     window.__SCIENCE_QA__?.setQuality('low');
     window.__SCIENCE_QA__?.setPlaying(false);
   });
+  if (viewportName === 'desktop') {
+    await page.locator('#toggle-inspector-panel').click();
+    assert(
+      (await page.locator('#toggle-inspector-panel').getAttribute('aria-expanded')) === 'true',
+      browserName + ': Inspector toggle did not expand the panel.',
+    );
+  }
   assert(await page.title() === 'Scientific Animation Generator', `${browserName}/${viewportName}: wrong title.`);
   assert(await page.evaluate(() => (document.body.textContent ?? '').includes('v0.7.0')), `${browserName}/${viewportName}: version label missing.`);
   assert(await page.locator('#focus-select option').count() === 10, `${browserName}/${viewportName}: celestial catalog incomplete.`);
@@ -463,6 +470,11 @@ async function runDesktopInteractions(browserName, browser) {
     window.__SCIENCE_QA__?.setQuality('low');
     window.__SCIENCE_QA__?.setPlaying(false);
   });
+  await page.locator('#toggle-inspector-panel').click();
+  assert(
+    (await page.locator('#toggle-inspector-panel').getAttribute('aria-expanded')) === 'true',
+    browserName + ': Inspector toggle did not expand the panel for interaction tests.',
+  );
 
   markProgress('interactions:focus-cycle');
   for (const object of ['moon', 'earth', 'saturn']) {
@@ -550,10 +562,11 @@ async function runDesktopInteractions(browserName, browser) {
   for (const value of ['real-distance', 'real-scale', 'learning', 'real-distance']) await scale.selectOption(value);
   assert(await scale.inputValue() === 'real-distance', browserName + ': visual scale selection failed.');
   await page.evaluate(() => window.__SCIENCE_QA__?.closeControlCenter());
-  await page.waitForFunction(() => document.querySelector('#control-center')?.hidden === true);
+  await page.waitForFunction(() => !(document.querySelector('#control-center') instanceof HTMLDialogElement) || !document.querySelector('#control-center').open);
   await selectOptionStable(page, '#focus-select', 'sun', browserName + ' Sun focus');
   const inspectorScale = page.locator('.inspector-panel [data-parameter=scaleMode]');
   await inspectorScale.selectOption('real-distance');
+  await dispatchClick(page, '[data-view-control="reframe"]');
   await page.waitForTimeout(450);
   const visualDiagnostics = await page.evaluate(() => window.__SCIENCE_QA__?.getVisualDiagnostics());
   assert(visualDiagnostics?.scaleMode === 'real-distance', browserName + ': Real Distance diagnostics did not activate.');
@@ -644,10 +657,11 @@ async function runDesktopInteractions(browserName, browser) {
     for (const required of ['index.html', 'project.scienceproject', 'README.md', 'ATTRIBUTION.md']) {
       assert(entryNames.includes(required), `ZIP omits ${required}.`);
     }
-    assert(entryNames.some((name) => name.startsWith('assets/planets/')), 'ZIP omits planet texture assets.');
+    assert(!entryNames.some((name) => name.startsWith('assets/planets/')), 'ZIP duplicates textures already embedded in index.html.');
     const zipHtml = strFromU8(entries['index.html']);
     assert(zipHtml.includes('v0.7.0') && zipHtml.includes('standalone-control-button'), 'ZIP packages an outdated standalone HTML.');
     assert(!/<script\b[^>]*\bsrc\s*=/i.test(zipHtml), 'ZIP standalone HTML contains external script tag.');
+    assert(/data:image\/(?:png|jpeg);base64,/i.test(zipHtml), 'ZIP standalone HTML does not embed its planet textures.');
     results.downloads.zip = { filename: zipDownload.suggestedFilename(), bytes: zipBytes.length, sha256: sha256(zipBytes), entries: entryNames };
   }
 
@@ -769,6 +783,7 @@ async function verifyCanvasFallback(browser) {
   await page.goto(qaBridgeUrl(), { waitUntil: 'domcontentloaded', timeout: 90_000 });
   await page.waitForSelector('canvas.canvas-fallback', { timeout: 60_000 });
   await waitForQaBridge(page);
+  await page.locator('#toggle-inspector-panel').click();
   assert((await page.locator('canvas.canvas-fallback').getAttribute('aria-label'))?.includes('Earth Moon'), 'Canvas fallback Moon support missing.');
   await selectOptionStable(page, '#focus-select', 'moon', 'Canvas Moon focus');
   await page.waitForFunction(() => /Focused on Moon.*Canvas 2D mode/i.test(document.querySelector('#status-message')?.textContent ?? ''));
@@ -778,6 +793,7 @@ async function verifyCanvasFallback(browser) {
   // Always invoked with browserName === 'chromium' (see call site); browserName is not in
   // scope here since this is a top-level function, not a closure inside runBrowser.
   await selectOptionStable(page, '#focus-select', 'sun', 'chromium canvas-fallback Sun focus');
+  await dispatchClick(page, '[data-view-control="reframe"]');
   await page.waitForTimeout(450);
   if (captureScreenshots) {
     await page.screenshot({ path: join(evidenceDir, 'real-distance-overview-canvas.png') });

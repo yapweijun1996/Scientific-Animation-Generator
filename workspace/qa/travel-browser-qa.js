@@ -84,11 +84,10 @@ async function waitForControlCenter(page, timeoutMs = 20_000) {
       const panel = document.querySelector('#control-center');
       return {
         exists: panel instanceof HTMLElement,
-        hidden: panel instanceof HTMLElement ? panel.hidden : null,
-        isOpen: panel instanceof HTMLElement ? panel.classList.contains('is-open') : false,
+        isOpen: panel instanceof HTMLDialogElement ? panel.open : false,
       };
     });
-    if (state.exists && state.hidden === false) return state;
+    if (state.exists && state.isOpen) return state;
     await sleep(100);
   }
   throw new Error('Control Center did not open: ' + JSON.stringify(state));

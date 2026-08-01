@@ -1,7 +1,7 @@
 {
   "version": "0.7.0",
-  "runAt": "2026-08-01T01:48:39.714Z",
-  "baseUrl": "http://127.0.0.1:51392/",
+  "runAt": "2026-08-01T03:57:21.917Z",
+  "baseUrl": "http://127.0.0.1:55510/",
   "browsers": [
     {
       "name": "webkit",
@@ -33,7 +33,7 @@
   "observer": {},
   "visualScale": {},
   "passed": true,
-  "qaRunId": "v0.7.0-release-2026-08-01T01-47-13-241Z-64155-webkit__desktop__standalone",
+  "qaRunId": "v0.7.0-release-2026-08-01T03-56-19-444Z-86305-webkit__desktop__standalone",
   "evidenceDirectory": "public/review/v0.7.0-evidence/webkit__desktop__standalone",
   "requestedBrowsers": [
     "webkit"

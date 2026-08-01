@@ -212,7 +212,7 @@ const architectureAssertions = [
   ['shared deterministic clock step', clockSource.includes('stepSimulationClock') && clockSource.includes('MAX_SIMULATION_STEP_SECONDS')],
   ['signed Worker deterministic step', workerSource.includes("type: 'step'") && workerSource.includes('stepSimulationClock')],
   ['runtime Worker step bridge', runtimeSource.includes('pendingSimulationSteps') && runtimeSource.includes('stepSimulation(realSeconds')],
-  ['asteroid quality tiers', runtimeSource.includes("quality === 'low' ? 260") && runtimeSource.includes("quality === 'high' ? 1700")],
+  ['asteroid quality tiers', runtimeSource.includes("quality === 'low' ? 220") && runtimeSource.includes("quality === 'high' ? 1700")],
   ['Canvas deterministic-step parity', fallbackSource.includes('drawAsteroidBelt') && fallbackSource.includes('stepSimulationClock') && fallbackSource.includes('stepSimulation(realSeconds')],
   ['shared orbital math retained', orbitalMathSource.includes('planetPositionAu') && orbitalMathSource.includes('moonOrbitAngle')],
   ['shared texture source injection', runtimeSource.includes('this.options.textureSource')],
@@ -231,10 +231,11 @@ const failedArchitecture = architectureAssertions.filter(([, passed]) => !passed
 if (failedArchitecture.length) throw new Error(`Architecture assertions failed: ${failedArchitecture.map(([name]) => name).join(', ')}`);
 
 const zipSource = readFileSync(join(root, 'src/export/zip-export.ts'), 'utf8');
+const zipWorkerSource = readFileSync(join(root, 'src/export/zip-export.worker.ts'), 'utf8');
 const zipAssertions = [
   ['current ZIP filename', zipSource.includes('solar-system-source-v${APP_VERSION}.zip')],
   ['same standalone builder used by ZIP', zipSource.includes('createStandaloneHtml(snapshot, textureSources)')],
-  ['texture byte packaging', zipSource.includes('loadTextureBytes()')],
+  ['no duplicate texture byte packaging', !zipSource.includes('loadTextureBytes()')],
   // file:// blocks WebGL uploads of separately-fetched images, so index.html must embed
   // textures inline; relative assets/ paths would silently fall back to procedural rendering.
   ['ZIP index.html embeds textures inline', zipSource.includes('loadTextureDataUrls()')],
@@ -243,6 +244,7 @@ const zipAssertions = [
   ['attribution packaged', zipSource.includes("archive['ATTRIBUTION.md']")],
   ['README packaged', zipSource.includes("archive['README.md']")],
   ['Moon asset declaration', zipSource.includes('No third-party Moon texture asset is included')],
+  ['ZIP compression runs in Worker', zipSource.includes('zip-export.worker.ts') && zipWorkerSource.includes('zipSync')],
 ];
 const failedZipAssertions = zipAssertions.filter(([, passed]) => !passed);
 if (failedZipAssertions.length) throw new Error(`ZIP source assertions failed: ${failedZipAssertions.map(([name]) => name).join(', ')}`);
