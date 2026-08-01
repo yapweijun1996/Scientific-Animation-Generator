@@ -33,6 +33,13 @@ for (const forbidden of ['threeModuleSource', 'const PLANETS=', 'const MOON=', '
   }
 }
 
+const editorSource = readFileSync(join(root, 'src/editor/scientific-editor.ts'), 'utf8');
+for (const rootAbsoluteLink of ['href="/review/', 'href="/ATTRIBUTION.md', 'href="/PRIVACY.md']) {
+  if (editorSource.includes(rootAbsoluteLink)) {
+    throw new Error(`Editor link is not compatible with a project-scoped static host: ${rootAbsoluteLink}`);
+  }
+}
+
 const dist = join(root, 'dist');
 if (!existsSync(dist)) throw new Error('Production dist directory is missing.');
 const files = [];

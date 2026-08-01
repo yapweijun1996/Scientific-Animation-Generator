@@ -330,9 +330,9 @@ export class ScientificEditor {
               <nav class="quick-access" aria-label="Quick access">
                 <span class="eyebrow">Quick access</span>
                 <button type="button" data-quick-access="accuracy-report"><i class="quick-icon is-teal" aria-hidden="true">✓</i> Scientific Accuracy Report</button>
-                <a href="/review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener"><i class="quick-icon is-blue" aria-hidden="true">≡</i> Release notes</a>
-                <a href="/ATTRIBUTION.md" target="_blank" rel="noopener"><i class="quick-icon is-amber" aria-hidden="true">◎</i> Texture attribution</a>
-                <a href="/PRIVACY.md" target="_blank" rel="noopener"><i class="quick-icon is-violet" aria-hidden="true">◐</i> Privacy</a>
+                <a href="./review/v${APP_VERSION}-release-notes.md" target="_blank" rel="noopener"><i class="quick-icon is-blue" aria-hidden="true">≡</i> Release notes</a>
+                <a href="./ATTRIBUTION.md" target="_blank" rel="noopener"><i class="quick-icon is-amber" aria-hidden="true">◎</i> Texture attribution</a>
+                <a href="./PRIVACY.md" target="_blank" rel="noopener"><i class="quick-icon is-violet" aria-hidden="true">◐</i> Privacy</a>
               </nav>
             </div>
 
@@ -432,7 +432,7 @@ export class ScientificEditor {
             <span>App ${APP_VERSION}</span>
           </span>
           <span class="statusbar-links">
-            <a href="/review/v${APP_VERSION}-qa-report.md" target="_blank" rel="noopener"><span aria-hidden="true">◍</span> Help</a>
+            <a href="./review/v${APP_VERSION}-qa-report.md" target="_blank" rel="noopener"><span aria-hidden="true">◍</span> Help</a>
             <a href="https://github.com/yapweijun1996/Scientific-Animation-Generator/issues" target="_blank" rel="noopener"><span aria-hidden="true">✎</span> Give feedback</a>
           </span>
         </footer>
